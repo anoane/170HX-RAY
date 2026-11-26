@@ -558,7 +558,45 @@ workload benchmark and refuses benchmark-only options before host access;
 control remain explicit `not-requested` components. Use the separate
 `full-report-bench` command (alias `full-report+bench`) for diagnostics,
 ArchBench, transient 150-W-by-default power control, and sampled power
-envelopes.
+envelopes. The two commands run the same read, export, and non-authorizing
+planning pipeline; the `-bench` form only adds the benchmark campaign.
+
+### Full-report planning and exporter contract
+
+For every selected card, both report modes request three independently checked
+planning layers:
+
+1. The full-dump goal/checklist layer emits `evidence-only`, `public-model`,
+   `cross-checked-theory`, and `compare`. Each model has JSON, JSONL, text, and
+   canonical-JSON binary transports, plus an inert apply dry-run and OTP
+   readiness record.
+2. The exact-current candidate layer emits all 18 profiles per card. The whole
+   candidate is replay-checked as JSON, JSONL, text, and canonical-JSON binary;
+   every profile's proposed complete 512-row MAIN image is also independently
+   replay-checked as JSON, JSONL, indexed text, and raw u32le.
+3. The sealed-manifest layer compiles and verifies the seven admitted v2
+   profiles per card. It does not review, execute, pulse, or authorize them.
+
+The ordinary full-dump request asks for every covered observation transport
+(JSON, JSONL, text, and binary register records), all nine MAIN row transports
+(`xray-json`, `xray-jsonl`, `indexed-text`, `raw-u32le`, `ffcalc-json`,
+`xpatrik-json`, `ga100-fuse-re-json`, `dstoro-projection-json`, and
+`dstoro-jsonl`), all four exact RIR transports, and all four register transports.
+The RIR set is raw u32le, indexed text, JSON, and JSONL; the register set is
+JSON, JSONL, text, and address/value u32le. The glitch-read branch requests and
+verifies the same applicable exporter set when `--include-glitch-read` is
+explicitly selected.
+
+These are fail-closed requests, not promises to manufacture missing evidence.
+A layer is `completed` only after its artifacts are independently replayed or
+verified. If no eligible complete 512-row MAIN or other prerequisite exists,
+the report records that layer as `skipped`; if eligible MAIN evidence exists
+but a required product is absent or inconsistent, it records `failed`. A
+verified live semantic capture may supply the exact-current candidate input;
+otherwise pass matching `--physical-capture` inputs. The exporter uses the
+empirical `S=222`, `E=511` retained-population boundary only for compatible
+serialization. That interval is not an official GA100 physical descriptor,
+does not identify OTP physics, and grants no write authority.
 
 Report with every XRAY BAR/controller capture level explicitly skipped. Host,
 PCI and query-only driver inventory still run and retain their opaque-effects
@@ -593,6 +631,11 @@ python3 "$XRAY" full-report "$XRAY_OUT/report-maintenance" -- \
   --read-level passive --read-level bar-read --read-level semantic-read \
   --physical-capture /absolute/path/to/native-level3.json
 ```
+
+Repeat `--physical-capture` and the corresponding card selector as required by
+the exact-current multi-card campaign. A report with missing or historical
+inputs preserves the candidate/manifest layers as explicit skips or failures;
+it does not silently substitute an older card image.
 
 Full diagnostics plus ArchBench and 150 W campaign control:
 

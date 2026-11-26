@@ -14,8 +14,7 @@ default.
 
 The ArchBench Git submodule under third_party/archbench_cuda13_5_v0_2_0 is a
 separately versioned repository governed by its own LICENSE and NOTICE. It is
-offered under AGPL-3.0-or-later OR MIT; its original MIT grant and ArchBench
-contributor copyright remain intact. Other third-party,
+licensed under AGPL-3.0-or-later. Other third-party,
 historical, captured, generated, or evidentiary materials retain the licenses
 and provenance stated in their files; this notice does not claim authorship or
 relicense material that Fabiano Anemone does not own.

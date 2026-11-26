@@ -27,7 +27,7 @@ import subprocess
 import sys
 
 
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 SCHEMA = "170hx-xray-full-report-v1"
 REPORT_MODES = ("report", "report+bench")
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -86,6 +86,66 @@ MANIFEST_PROFILES = (
     "specimen-sys-pipe-to-defect-experimental",
     "specimen-media-mig-to-defect-experimental",
 )
+FULL_REPORT_FUSELESS_START = 222
+FULL_REPORT_FUSELESS_END = 511
+FULL_REPORT_BOUNDS_PROVENANCE = (
+    "empirical retained GA100/CMP population bound; not an official GA100 "
+    "physical descriptor"
+)
+FULL_REPORT_EXPORT_PROVENANCE = (
+    "170HX-XRAY full-report complete exporter request; source-specific "
+    "certification is retained; serialization grants no write authority"
+)
+ROW_EXPORT_FORMATS = (
+    "xray-json", "xray-jsonl", "indexed-text", "raw-u32le", "ffcalc-json",
+    "xpatrik-json", "ga100-fuse-re-json", "dstoro-projection-json",
+    "dstoro-jsonl",
+)
+RIR_EXPORT_KINDS = (
+    "rir-raw-u32le", "rir-indexed-text", "rir-json", "rir-jsonl",
+)
+REGISTER_EXPORT_KINDS = (
+    "register-json", "register-jsonl", "register-text",
+    "register-address-value-u32le",
+)
+OBSERVATION_TRANSPORT_KINDS = {
+    "json": "live-capture",
+    "jsonl": "live-capture-jsonl",
+    "text": "live-capture-text",
+    "binary_register_records": "live-capture-register-u32le",
+}
+CHECKLIST_PLANNING_MODELS = (
+    "evidence-only", "public-model", "cross-checked-theory", "compare",
+)
+CANDIDATE_EXPORT_FILENAMES = {
+    "json": "candidate-plan.json",
+    "jsonl": "candidate-plan.jsonl",
+    "text": "candidate-plan.txt",
+    "canonical-json-bin": "candidate-plan.canonical-json.bin",
+}
+CANDIDATE_TEXT_BEGIN = "----- BEGIN CANONICAL CANDIDATE PLAN JSON -----"
+CANDIDATE_TEXT_END = "----- END CANONICAL CANDIDATE PLAN JSON -----"
+CANDIDATE_PROFILES = (
+    "specimen-80gb-hbm",
+    "specimen-more-sm",
+    "xray-common-permanent-topology",
+    "specimen-nvlink-global",
+    "specimen-pcie-gen4-isolated",
+    "specimen-pcie-gen4-a100-exact",
+    "specimen-a100-20b5-identity",
+    "specimen-sys-pipe-to-defect-experimental",
+    "specimen-media-mig-to-defect-experimental",
+    "public-corrected-cmpglitch-intent",
+    "public-corrected-dstoro-intent",
+    "xray-best-evidence-a100-conversion",
+    "review-ss0-iff",
+    "review-ss1-iff",
+    "review-dp-conventional",
+    "review-ecc-conventional",
+    "review-nvenc-unsupported",
+    "review-nvlink-per-link-unsupported",
+)
+CANDIDATE_PROFILE_COUNT = len(CANDIDATE_PROFILES)
 COMPONENT_STATUSES = frozenset((
     "completed", "failed", "skipped", "not-requested",
     "not-yet-supported",
@@ -1665,6 +1725,389 @@ def change_limits(runner, smi, targets):
     return records
 
 
+def complete_row_export_arguments(row_view):
+    """Return the explicit, non-authorizing complete exporter request."""
+    return [
+        "--fuseless-start", str(FULL_REPORT_FUSELESS_START),
+        "--fuseless-end", str(FULL_REPORT_FUSELESS_END),
+        "--bounds-provenance", FULL_REPORT_BOUNDS_PROVENANCE,
+        "--row-view", row_view,
+        "--provenance", FULL_REPORT_EXPORT_PROVENANCE,
+        "--include-unsafe-projections",
+    ]
+
+
+def _strict_json_payload(payload, label):
+    def reject(value):
+        raise ReportError("non-finite JSON in %s: %s" % (label, value))
+    try:
+        value = json.loads(
+            payload, parse_constant=reject,
+            object_pairs_hook=_strict_object(label),
+        )
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise ReportError("invalid JSON in %s: %s" % (label, exc)) from exc
+    if not isinstance(value, dict):
+        raise ReportError("candidate transport is not an object: %s" % label)
+    return value
+
+
+def candidate_transport_document(path, output_format):
+    """Independently decode one lossless candidate-plan transport."""
+    raw = Path(path).read_bytes()
+    try:
+        text = raw.decode("utf-8" if output_format == "text" else "ascii")
+    except UnicodeError as exc:
+        raise ReportError(
+            "candidate %s transport is not valid text: %s" %
+            (output_format, exc)
+        ) from exc
+    if output_format == "text":
+        begin_marker = CANDIDATE_TEXT_BEGIN + "\n"
+        end_marker = "\n" + CANDIDATE_TEXT_END
+        begin = text.find(begin_marker)
+        end = text.rfind(end_marker)
+        if begin < 0 or end <= begin:
+            raise ReportError("candidate text transport lacks canonical markers")
+        text = text[begin + len(begin_marker):end]
+    elif output_format == "jsonl":
+        lines = text.splitlines()
+        if len(lines) != 1:
+            raise ReportError("candidate JSONL transport must contain one record")
+        text = lines[0]
+    elif output_format not in ("json", "canonical-json-bin"):
+        raise ReportError("unknown candidate transport: %s" % output_format)
+    return _strict_json_payload(text, "candidate-%s" % output_format)
+
+
+def full_dump_product_coverage(index, requested_access_scope="ordinary"):
+    """Prove complete products for eligible specimens in one access scope."""
+    if requested_access_scope not in ("ordinary", "glitch-read", "all"):
+        raise ReportError(
+            "unknown full-dump coverage scope: %s" % requested_access_scope
+        )
+    issues = []
+    request = index.get("request") if isinstance(index, dict) else None
+    if not isinstance(request, dict):
+        request = {}
+        issues.append("request metadata is absent")
+    if request.get("include_unsafe_projections") is not True:
+        issues.append("public-shaped projection acknowledgement is absent")
+    if request.get("fuseless_bounds") != [
+            FULL_REPORT_FUSELESS_START, FULL_REPORT_FUSELESS_END]:
+        issues.append("empirical S/E exporter bounds differ from 222..511")
+    if request.get("planning_models") != list(CHECKLIST_PLANNING_MODELS):
+        issues.append("checklist planning-model request is incomplete")
+
+    artifacts = index.get("artifacts") if isinstance(index, dict) else None
+    artifact_by_path = {
+        value.get("path"): value for value in artifacts or []
+        if isinstance(value, dict) and isinstance(value.get("path"), str)
+    }
+    observations = (
+        index.get("observations", []) if isinstance(index, dict) else []
+    )
+    if not isinstance(observations, list):
+        observations = []
+        issues.append("observation inventory is not a list")
+
+    def in_scope(observation):
+        access = observation.get("requested_access")
+        if requested_access_scope == "all":
+            return True
+        if requested_access_scope == "glitch-read":
+            return access == "glitch-read"
+        return access != "glitch-read"
+
+    scoped_observations = {
+        value.get("id"): value for value in observations
+        if isinstance(value, dict) and in_scope(value)
+        and isinstance(value.get("id"), str)
+    }
+    observation_transport_sets = 0
+    for observation in scoped_observations.values():
+        if observation.get("status") != "complete":
+            continue
+        transports = observation.get("transports")
+        valid = isinstance(transports, dict)
+        if valid:
+            for name, kind in OBSERVATION_TRANSPORT_KINDS.items():
+                path = transports.get(name)
+                if (not isinstance(path, str) or
+                        artifact_by_path.get(path, {}).get("kind") != kind):
+                    valid = False
+                    break
+        if not valid:
+            issues.append(
+                "observation %s lacks all four capture transports" %
+                observation.get("id", "unknown")
+            )
+        else:
+            observation_transport_sets += 1
+
+    all_specimens = index.get("specimens") if isinstance(index, dict) else None
+    if not isinstance(all_specimens, list):
+        all_specimens = []
+        issues.append("specimen inventory is not a list")
+    specimens = []
+    for specimen in all_specimens:
+        if not isinstance(specimen, dict):
+            issues.append("malformed specimen record")
+            continue
+        observation_id = specimen.get("observation")
+        if requested_access_scope == "all":
+            specimens.append(specimen)
+        elif observation_id is None:
+            if requested_access_scope == "ordinary":
+                specimens.append(specimen)
+        elif observation_id in scoped_observations:
+            specimens.append(specimen)
+    checklist_complete = 0
+    complete_main_passes = 0
+    eligible_specimens = 0
+    complete_rir_sets = 0
+    complete_register_sets = 0
+    for specimen in specimens:
+        specimen_id = specimen.get("id", "unknown")
+        main = specimen.get("main")
+        complete_passes = [
+            value for value in main.get("passes", [])
+            if isinstance(value, dict) and value.get("complete") is True
+        ] if isinstance(main, dict) else []
+        if not complete_passes:
+            continue
+        eligible_specimens += 1
+        complete_main_passes += len(complete_passes)
+
+        planning = specimen.get("planning")
+        models = []
+        for value in planning or []:
+            if not isinstance(value, dict):
+                continue
+            model = value.get("model")
+            transports = value.get("transports")
+            valid = (
+                value.get("status") == "generated_non_executable"
+                and isinstance(transports, dict)
+                and isinstance(value.get("apply_dry_run"), str)
+                and isinstance(value.get("otp_readiness"), str)
+            )
+            expected_kinds = {
+                "json": "plan-%s" % model,
+                "jsonl": "plan-jsonl-%s" % model,
+                "text": "plan-text-%s" % model,
+                "binary_canonical_json": (
+                    "plan-canonical-json-bin-%s" % model
+                ),
+            }
+            if valid:
+                for name, kind in expected_kinds.items():
+                    path = transports.get(name)
+                    if (not isinstance(path, str) or
+                            artifact_by_path.get(path, {}).get("kind") != kind):
+                        valid = False
+                        break
+            if valid and artifact_by_path.get(
+                    value["apply_dry_run"], {}).get("kind") != (
+                        "apply-dry-run-%s" % model):
+                valid = False
+            if valid and artifact_by_path.get(
+                    value["otp_readiness"], {}).get("kind") != (
+                        "otp-readiness-%s" % model):
+                valid = False
+            if valid:
+                models.append(model)
+        if models != list(CHECKLIST_PLANNING_MODELS):
+            issues.append(
+                "%s checklist planning products are incomplete" % specimen_id
+            )
+        else:
+            checklist_complete += 1
+
+        for main_pass in complete_passes:
+            outputs = main_pass.get("outputs")
+            exported = [
+                value.get("format") for value in outputs or []
+                if isinstance(value, dict) and value.get("status") == "exported"
+                and isinstance(value.get("path"), str)
+                and artifact_by_path.get(value["path"], {}).get("kind") ==
+                "main-%s" % value.get("format")
+            ]
+            if exported != list(ROW_EXPORT_FORMATS):
+                issues.append(
+                    "%s MAIN pass %s lacks row exporters: %s" % (
+                        specimen_id, main_pass.get("pass"),
+                        ", ".join(sorted(
+                            set(ROW_EXPORT_FORMATS) - set(exported)
+                        )),
+                    )
+                )
+        registers = specimen.get("register_exports")
+        register_paths = (
+            registers.get("formats", []) if isinstance(registers, dict) else []
+        )
+        register_kinds = [
+            artifact_by_path.get(path, {}).get("kind")
+            for path in register_paths if isinstance(path, str)
+        ]
+        if (not isinstance(registers, dict) or
+                registers.get("available") is not True or
+                register_kinds != list(REGISTER_EXPORT_KINDS)):
+            issues.append("%s lacks all four register transports" % specimen_id)
+        else:
+            complete_register_sets += 1
+        rir = specimen.get("rir")
+        if not isinstance(rir, dict) or rir.get("available") is not True:
+            issues.append("%s lacks an exact RIR export" % specimen_id)
+        else:
+            rir_complete = True
+            for rir_pass in rir.get("passes", []):
+                paths = rir_pass.get("outputs", []) if isinstance(rir_pass, dict) else []
+                kinds = [
+                    artifact_by_path.get(path, {}).get("kind") for path in paths
+                ]
+                if kinds != list(RIR_EXPORT_KINDS):
+                    rir_complete = False
+            if not rir.get("passes") or not rir_complete:
+                issues.append("%s lacks all four RIR transports per pass" % specimen_id)
+            else:
+                complete_rir_sets += 1
+    if complete_main_passes == 0:
+        issues.append("no complete 512-row MAIN pass is available")
+    return {
+        "complete": not issues,
+        "issues": issues,
+        "expected_main_formats": list(ROW_EXPORT_FORMATS),
+        "expected_checklist_models": list(CHECKLIST_PLANNING_MODELS),
+        "requested_access_scope": requested_access_scope,
+        "observation_transport_sets": observation_transport_sets,
+        "specimens": len(specimens),
+        "eligible_specimens": eligible_specimens,
+        "specimens_with_complete_checklists": checklist_complete,
+        "complete_main_passes": complete_main_passes,
+        "complete_rir_sets": complete_rir_sets,
+        "complete_register_sets": complete_register_sets,
+        "empirical_fuseless_bounds": [
+            FULL_REPORT_FUSELESS_START, FULL_REPORT_FUSELESS_END,
+        ],
+        "execution_authorized": False,
+    }
+
+
+def _full_dump_coverage_status(coverage):
+    if coverage["complete"]:
+        return "completed"
+    if coverage["complete_main_passes"] == 0:
+        return "skipped"
+    return "failed"
+
+
+def record_full_dump_coverage(index, ledger, source, scope="ordinary"):
+    coverage = full_dump_product_coverage(index, scope)
+    status = _full_dump_coverage_status(coverage)
+    ledger.append(item(
+        "read-plan-export-coverage",
+        status,
+        ("all checklist models and eligible row/RIR/register transports verified"
+         if status == "completed" else
+         "verified bundle has no eligible complete 512-row MAIN prerequisite"
+         if status == "skipped" else
+         "an eligible complete MAIN exists but required products are missing"),
+        source=source, coverage=coverage, execution_authorized=False,
+    ))
+    return coverage
+
+
+def record_skipped_full_dump_coverage(ledger, reason):
+    ledger.append(item(
+        "read-plan-export-coverage", "skipped", reason,
+        expected_main_formats=list(ROW_EXPORT_FORMATS),
+        expected_checklist_models=list(CHECKLIST_PLANNING_MODELS),
+        execution_authorized=False,
+    ))
+
+
+def record_glitch_export_coverage(ledger, status, reason, coverage=None):
+    ledger.append(item(
+        "glitch-read-export-coverage", status, reason,
+        coverage=coverage,
+        expected_main_formats=list(ROW_EXPORT_FORMATS),
+        execution_authorized=False,
+    ))
+
+
+def promote_semantic_capture(args, bundle, index, bdfs, report_root):
+    """Bind one verified complete semantic observation to Layer 2 planning."""
+    if args.physical_capture:
+        return {"status": "explicit-input-retained", "promoted": False}
+    candidates = [
+        value for value in index.get("observations", [])
+        if isinstance(value, dict)
+        and value.get("requested_access") == "semantic-read"
+        and value.get("status") == "complete"
+        and isinstance(value.get("artifact"), str)
+    ]
+    if len(candidates) != 1:
+        return {
+            "status": "unavailable", "promoted": False,
+            "reason": "verified bundle does not contain exactly one complete semantic observation",
+        }
+    candidate = (Path(bundle) / candidates[0]["artifact"]).resolve()
+    try:
+        candidate.relative_to(Path(bundle).resolve())
+    except ValueError as exc:
+        raise ReportError("semantic capture escaped verified bundle") from exc
+    if candidate.is_symlink() or not candidate.is_file():
+        raise ReportError("semantic capture is absent or non-regular")
+    document = strict_json(candidate)
+    cards = document.get("cards")
+    observed = []
+    for card in cards if isinstance(cards, list) else []:
+        identity = card.get("card") if isinstance(card, dict) else None
+        bdf = identity.get("domain_bdf") if isinstance(identity, dict) else None
+        if isinstance(bdf, str):
+            observed.append(bdf.lower())
+    if len(observed) != len(set(observed)) or set(observed) != set(bdfs):
+        raise ReportError("semantic capture BDF set differs from report selection")
+    args.physical_capture = [str(candidate)]
+    return {
+        "status": "verified-live-semantic-promoted", "promoted": True,
+        "artifact": artifact(candidate, report_root),
+    }
+
+
+def record_planning_layer_coverage(ledger):
+    by_id = {value.get("id"): value for value in ledger if isinstance(value, dict)}
+    layers = [
+        ("goal-checklist", by_id.get("read-plan-export-coverage")),
+        ("candidate", by_id.get("exact-current-permanent-plans")),
+        ("sealed-append-compiler", by_id.get(
+            "guarded-experimental-write-manifests"
+        )),
+    ]
+    details = []
+    for name, value in layers:
+        details.append({
+            "layer": name,
+            "status": value.get("status") if isinstance(value, dict) else "missing",
+            "component": value.get("id") if isinstance(value, dict) else None,
+        })
+    statuses = [value["status"] for value in details]
+    if statuses == ["completed", "completed", "completed"]:
+        status = "completed"
+        reason = "all three planning layers completed and remain non-authorizing"
+    elif "failed" in statuses or "missing" in statuses:
+        status = "failed"
+        reason = "one or more required planning layers failed or were not recorded"
+    else:
+        status = "skipped"
+        reason = "one or more planning layers lacked an exact-current prerequisite"
+    ledger.append(item(
+        "three-planning-layer-coverage", status, reason,
+        layers=details, execution_authorized=False,
+    ))
+
+
 def run_glitch_dump(args, project, output, runner, bdfs, ledger):
     if not args.include_glitch_read:
         ledger.append(item(
@@ -1675,6 +2118,9 @@ def run_glitch_dump(args, project, output, runner, bdfs, ledger):
                 "glitch-read": "transient branch was not requested"
             },
         ))
+        record_glitch_export_coverage(
+            ledger, "not-requested", "transient branch was not requested"
+        )
         return
     logs = create_dir(output / "glitch-command")
     glitch = output / "glitch-read-bundle"
@@ -1683,9 +2129,10 @@ def run_glitch_dump(args, project, output, runner, bdfs, ledger):
         str(glitch), "--level", "glitch-read", "--register-profile", "all-safe",
         "--controller-helper", args.controller_helper,
     ]
+    glitch_argv.extend(complete_row_export_arguments("unknown"))
     append_bdfs(glitch_argv, bdfs)
     result = runner.run(glitch_argv, timeout=args.long_timeout)
-    ledger.append(item(
+    entry = item(
         "glitch-read-dump-plan",
         "completed" if result["returncode"] == 0 else "failed",
         "transient 2080-state captured" if result["returncode"] == 0
@@ -1693,7 +2140,45 @@ def run_glitch_dump(args, project, output, runner, bdfs, ledger):
         levels_requested=["glitch-read"],
         levels_completed=["glitch-read"] if result["returncode"] == 0 else [],
         command_evidence=save_command(result, logs, "glitch-read", output),
-    ))
+    )
+    coverage = None
+    if (glitch / "index.json").is_file() and (glitch / "SHA256SUMS").is_file():
+        verify = runner.run([
+            sys.executable, str(project / "170HX-XRAY.py"),
+            "verify-full-dump", str(glitch), "--output", "-",
+        ], timeout=args.long_timeout)
+        entry["verification"] = save_command(
+            verify, logs, "verify-glitch", output
+        )
+        if verify["returncode"] != 0:
+            entry["status"] = "failed"
+            entry["reason"] = "independent glitch bundle verification failed"
+        else:
+            coverage = full_dump_product_coverage(
+                strict_json(glitch / "index.json"), "glitch-read"
+            )
+            entry["product_coverage"] = coverage
+    elif result["returncode"] == 0:
+        entry["status"] = "failed"
+        entry["reason"] = "glitch full-dump returned success without index/manifest"
+    ledger.append(entry)
+    if coverage is not None:
+        coverage_status = _full_dump_coverage_status(coverage)
+        record_glitch_export_coverage(
+            ledger,
+            coverage_status,
+            ("all eligible glitch-state row transports verified"
+             if coverage_status == "completed" else
+             "verified glitch-state bundle has no complete eligible MAIN prerequisite"
+             if coverage_status == "skipped" else
+             "an eligible glitch-state MAIN exists but required products are missing"),
+            coverage,
+        )
+    else:
+        record_glitch_export_coverage(
+            ledger, "failed" if entry["status"] == "failed" else "skipped",
+            "no independently verified glitch-state bundle is available",
+        )
 
 
 def run_imported_full_dump(args, project, output, runner, bdfs, ledger):
@@ -1719,12 +2204,19 @@ def run_imported_full_dump(args, project, output, runner, bdfs, ledger):
     )
     if source_verify["returncode"] != 0:
         ledger.append(entry)
+        record_skipped_full_dump_coverage(
+            ledger, "imported bundle failed verification"
+        )
         ledger.append(item(
             "glitch-read-dump-plan",
             "skipped" if requested_glitch else "not-requested",
             "imported bundle failed verification",
             levels_requested=["glitch-read"], levels_completed=[],
         ))
+        record_glitch_export_coverage(
+            ledger, "failed" if requested_glitch else "not-requested",
+            "imported bundle failed verification",
+        )
         return
     destination = copy_tree_new(source, output / "read-dump-plan-bundle")
     copied_verify = runner.run([
@@ -1738,12 +2230,19 @@ def run_imported_full_dump(args, project, output, runner, bdfs, ledger):
         entry["status"] = "failed"
         entry["reason"] = "relocated imported full-dump verification failed"
         ledger.append(entry)
+        record_skipped_full_dump_coverage(
+            ledger, "relocated imported bundle failed verification"
+        )
         ledger.append(item(
             "glitch-read-dump-plan",
             "skipped" if requested_glitch else "not-requested",
             "relocated imported bundle failed verification",
             levels_requested=["glitch-read"], levels_completed=[],
         ))
+        record_glitch_export_coverage(
+            ledger, "failed" if requested_glitch else "not-requested",
+            "relocated imported bundle failed verification",
+        )
         return
     index = strict_json(destination / "index.json")
     if (index.get("command") != "full-dump" or
@@ -1754,14 +2253,24 @@ def run_imported_full_dump(args, project, output, runner, bdfs, ledger):
         entry["status"] = "failed"
         entry["reason"] = "imported full-dump completion/safety contract mismatch"
         ledger.append(entry)
+        record_skipped_full_dump_coverage(
+            ledger, "imported completion contract was rejected"
+        )
         ledger.append(item(
             "glitch-read-dump-plan",
             "skipped" if requested_glitch else "not-requested",
             "imported completion contract was rejected",
             levels_requested=["glitch-read"], levels_completed=[],
         ))
+        record_glitch_export_coverage(
+            ledger, "failed" if requested_glitch else "not-requested",
+            "imported completion contract was rejected",
+        )
         return
     entry["imported_bundle_completion"] = dict(index["completion"])
+    product_coverage = full_dump_product_coverage(index)
+    entry["complete_product_set"] = product_coverage["complete"]
+    entry["product_coverage"] = product_coverage
     if index["completion"]["status"] == "PARTIAL":
         entry["reason"] = (
             "verified capture levels imported; the source bundle explicitly "
@@ -1833,6 +2342,7 @@ def run_imported_full_dump(args, project, output, runner, bdfs, ledger):
             args.physical_capture = [str(semantic_capture)]
             entry["candidate_input"] = artifact(semantic_capture, output)
     ledger.append(entry)
+    record_full_dump_coverage(index, ledger, "verified-import")
     if "glitch-read" in complete_levels:
         ledger.append(item(
             "glitch-read-dump-plan", "completed",
@@ -1854,6 +2364,23 @@ def run_imported_full_dump(args, project, output, runner, bdfs, ledger):
                 "glitch-read": "transient branch was not requested"
             }),
         ))
+    if "glitch-read" in complete_levels:
+        glitch_coverage = full_dump_product_coverage(index, "glitch-read")
+        glitch_status = _full_dump_coverage_status(glitch_coverage)
+        record_glitch_export_coverage(
+            ledger, glitch_status,
+            ("verified imported glitch-state products are complete"
+             if glitch_status == "completed" else
+             "verified imported glitch-state capture has no complete MAIN prerequisite"
+             if glitch_status == "skipped" else
+             "an eligible imported glitch-state MAIN exists but required products are missing"),
+            glitch_coverage,
+        )
+    else:
+        record_glitch_export_coverage(
+            ledger, "skipped" if requested_glitch else "not-requested",
+            "imported bundle has no complete glitch-state observation",
+        )
 
 
 def run_full_dump(args, project, output, runner, bdfs, ledger):
@@ -1882,6 +2409,13 @@ def run_full_dump(args, project, output, runner, bdfs, ledger):
              "transient branch was not requested"),
             levels_requested=["glitch-read"], levels_completed=[],
         ))
+        record_glitch_export_coverage(
+            ledger, "skipped" if args.include_glitch_read else "not-requested",
+            "live capture is disabled",
+        )
+        record_skipped_full_dump_coverage(
+            ledger, "live capture was disabled and no verified bundle was imported"
+        )
         return
     if not args.read_level:
         ledger.append(item(
@@ -1890,6 +2424,9 @@ def run_full_dump(args, project, output, runner, bdfs, ledger):
             levels_requested=requested_levels, levels_completed=[],
             levels_skipped=skipped_levels,
         ))
+        record_skipped_full_dump_coverage(
+            ledger, "all ordinary capture levels were excluded by access policy"
+        )
         run_glitch_dump(args, project, output, runner, bdfs, ledger)
         return
     bundle = output / "read-dump-plan-bundle"
@@ -1899,6 +2436,7 @@ def run_full_dump(args, project, output, runner, bdfs, ledger):
         "--controller-helper", args.controller_helper,
         "--candidate-planner", str(project / "tools" / "170hx_candidate_plan.py"),
     ]
+    argv.extend(complete_row_export_arguments("locked_controller"))
     for level in args.read_level:
         argv.extend(("--level", level))
     append_bdfs(argv, bdfs)
@@ -1918,7 +2456,8 @@ def run_full_dump(args, project, output, runner, bdfs, ledger):
         levels_skipped=skipped_levels,
         command_evidence=save_command(result, logs, "full-dump", output),
     )
-    if result["returncode"] == 0:
+    verified_index = None
+    if (bundle / "index.json").is_file() and (bundle / "SHA256SUMS").is_file():
         verify = runner.run([
             sys.executable, str(project / "170HX-XRAY.py"),
             "verify-full-dump", str(bundle), "--output", "-",
@@ -1927,7 +2466,37 @@ def run_full_dump(args, project, output, runner, bdfs, ledger):
         if verify["returncode"] != 0:
             entry["status"] = "failed"
             entry["reason"] = "independent bundle verification failed"
+        else:
+            verified_index = strict_json(bundle / "index.json")
+            entry["product_coverage"] = full_dump_product_coverage(
+                verified_index
+            )
+            try:
+                entry["candidate_input_promotion"] = promote_semantic_capture(
+                    args, bundle, verified_index, bdfs, output
+                )
+            except (OSError, UnicodeError, json.JSONDecodeError,
+                    ReportError) as exc:
+                entry["candidate_input_promotion"] = {
+                    "status": "rejected", "promoted": False,
+                    "reason": str(exc),
+                }
+                if "semantic-read" in args.read_level:
+                    entry["status"] = "failed"
+                    entry["reason"] = (
+                        "verified semantic capture was not eligible for "
+                        "candidate planning: %s" % exc
+                    )
+    elif result["returncode"] == 0:
+        entry["status"] = "failed"
+        entry["reason"] = "full-dump returned success without an index/manifest"
     ledger.append(entry)
+    if verified_index is not None:
+        record_full_dump_coverage(verified_index, ledger, "live-full-dump")
+    else:
+        record_skipped_full_dump_coverage(
+            ledger, "no independently verified live full-dump index is available"
+        )
     run_glitch_dump(args, project, output, runner, bdfs, ledger)
 
 
@@ -1946,6 +2515,128 @@ def _candidate_words(values, count, label):
             raise ReportError("%s[%d] is outside u32" % (label, index))
         words.append(word)
     return words
+
+
+def _candidate_packed_sha256(words):
+    return hashlib.sha256(struct.pack("<%dI" % len(words), *words)).hexdigest()
+
+
+def export_candidate_proposed_images(document, destination, report_root):
+    """Create and independently replay four neutral row transports/profile."""
+    root = create_dir(destination)
+    entries = []
+    cards = document.get("cards") if isinstance(document, dict) else None
+    if not isinstance(cards, list) or not cards:
+        raise ReportError("candidate proposed-image export has no cards")
+    for card in cards:
+        bdf = card.get("bdf") if isinstance(card, dict) else None
+        if not isinstance(bdf, str) or not BDF_RE.fullmatch(bdf):
+            raise ReportError("candidate proposed-image BDF is invalid")
+        card_root = create_dir(
+            root / bdf.replace(":", "-").replace(".", "-")
+        )
+        profiles = card.get("profiles")
+        profile_ids = [
+            value.get("model_id") if isinstance(value, dict) else None
+            for value in profiles or []
+        ]
+        if (not isinstance(profiles, list) or
+                profile_ids != list(CANDIDATE_PROFILES)):
+            raise ReportError("candidate proposed-image profile inventory is incomplete")
+        for profile in profiles:
+            profile_id = profile.get("model_id") if isinstance(profile, dict) else None
+            if (not isinstance(profile_id, str) or
+                    re.fullmatch(r"[A-Za-z0-9_.-]+", profile_id) is None):
+                raise ReportError("candidate profile ID is unsafe")
+            profile_root = create_dir(card_root / profile_id)
+            words = _candidate_words(
+                profile.get("proposed_complete_image_rows"), 512,
+                "%s/%s proposed MAIN" % (bdf, profile_id),
+            )
+            digest = _candidate_packed_sha256(words)
+            claimed = profile.get("proposed_complete_image_u32le_sha256")
+            if claimed != digest:
+                raise ReportError(
+                    "%s/%s proposed MAIN digest mismatch" % (bdf, profile_id)
+                )
+            rows = ["0x%08x" % value for value in words]
+            expected_json = {
+                "schema": "170hx-xray-proposed-main-v1",
+                "bdf": bdf, "profile_id": profile_id,
+                "rows": rows, "u32le_sha256": digest,
+                "execution_authorized": False,
+            }
+            paths = {
+                "json": write_new(
+                    profile_root / "proposed-main.json",
+                    json.dumps(
+                        expected_json, indent=2, sort_keys=True,
+                        allow_nan=False,
+                    ) + "\n",
+                ),
+                "jsonl": write_new(
+                    profile_root / "proposed-main.jsonl",
+                    "".join(
+                        json.dumps(
+                            {"row": index, "value": value},
+                            sort_keys=True, separators=(",", ":"),
+                            allow_nan=False,
+                        ) + "\n"
+                        for index, value in enumerate(rows)
+                    ),
+                ),
+                "indexed-text": write_new(
+                    profile_root / "proposed-main.indexed.txt",
+                    "".join(
+                        "[%03d] %s\n" % (index, value)
+                        for index, value in enumerate(rows)
+                    ),
+                ),
+                "raw-u32le": write_new(
+                    profile_root / "proposed-main.raw-u32le.bin",
+                    struct.pack("<512I", *words), True,
+                ),
+            }
+            if strict_json(paths["json"]) != expected_json:
+                raise ReportError("proposed MAIN JSON replay mismatch")
+            jsonl_words = []
+            for ordinal, line in enumerate(
+                    paths["jsonl"].read_text(encoding="ascii").splitlines()):
+                record = _strict_json_payload(
+                    line, "%s/%s proposed JSONL" % (bdf, profile_id)
+                )
+                if record.get("row") != ordinal:
+                    raise ReportError("proposed MAIN JSONL order mismatch")
+                jsonl_words.append(int(record.get("value"), 16))
+            indexed_words = []
+            for ordinal, line in enumerate(
+                    paths["indexed-text"].read_text(
+                        encoding="ascii"
+                    ).splitlines()):
+                match = re.fullmatch(r"\[(\d{3})\] (0x[0-9a-f]{8})", line)
+                if match is None or int(match.group(1)) != ordinal:
+                    raise ReportError("proposed MAIN indexed-text order mismatch")
+                indexed_words.append(int(match.group(2), 16))
+            raw = paths["raw-u32le"].read_bytes()
+            if len(raw) != 2048:
+                raise ReportError("proposed MAIN raw-u32le length mismatch")
+            raw_words = list(struct.unpack("<512I", raw))
+            if (jsonl_words != words or indexed_words != words or
+                    raw_words != words or _candidate_packed_sha256(raw_words) != digest):
+                raise ReportError(
+                    "%s/%s proposed MAIN transport replay mismatch" %
+                    (bdf, profile_id)
+                )
+            entries.append({
+                "bdf": bdf, "profile_id": profile_id,
+                "proposed_main_u32le_sha256": digest,
+                "formats": {
+                    name: artifact(path, report_root)
+                    for name, path in sorted(paths.items())
+                },
+                "execution_authorized": False,
+            })
+    return entries
 
 
 def candidate_target_summary(document, bdfs):
@@ -2159,10 +2850,12 @@ def run_candidates(args, project, output, runner, bdfs, ledger):
     captures = (copied_inputs * len(bdfs)
                 if len(copied_inputs) == 1 else copied_inputs)
     destination = output / "exact-current-candidate-plans.json"
+    export_all = output / "candidate-plan-exports"
     argv = [
         sys.executable, str(project / "tools" / "170hx_candidate_plan.py"),
         "--root", str(project.parent), "--same-capture-context",
         "--xray", str(project / "170HX-XRAY.py"), "--output", str(destination),
+        "--output-format", "json", "--export-all-dir", str(export_all),
     ]
     for capture, bdf in zip(captures, bdfs):
         argv.extend(("--physical-capture", capture, "--physical-card", bdf))
@@ -2178,13 +2871,61 @@ def run_candidates(args, project, output, runner, bdfs, ledger):
         levels_requested=["semantic-read"], levels_completed=[],
         levels_skipped={},
     )
-    if destination.is_file():
+    if destination.is_symlink():
+        entry["status"] = "failed"
+        entry["reason"] = "candidate planner returned a symlink instead of an output file"
+        entry["levels_skipped"] = {
+            "semantic-read": "candidate evidence was rejected"
+        }
+    elif destination.is_file():
         entry["artifact"] = artifact(destination, output)
         try:
             candidate_document = strict_json(destination)
             entry["specimen_targets"] = candidate_target_summary(
                 candidate_document, bdfs
             )
+            selected_profiles = candidate_document.get("selected_profiles")
+            if (not isinstance(selected_profiles, list) or
+                    selected_profiles != list(CANDIDATE_PROFILES) or
+                    any(value["research_profile_count"] !=
+                        CANDIDATE_PROFILE_COUNT
+                        for value in entry["specimen_targets"])):
+                raise ReportError(
+                    "candidate does not contain the exact ordered set of %d profiles per card" %
+                    CANDIDATE_PROFILE_COUNT
+                )
+            transports = {}
+            for output_format, filename in sorted(
+                    CANDIDATE_EXPORT_FILENAMES.items()):
+                transport_path = export_all / filename
+                if transport_path.is_symlink() or not transport_path.is_file():
+                    raise ReportError(
+                        "candidate %s transport is absent" % output_format
+                    )
+                if candidate_transport_document(
+                        transport_path, output_format) != candidate_document:
+                    raise ReportError(
+                        "candidate %s transport differs semantically" %
+                        output_format
+                    )
+                transports[output_format] = artifact(transport_path, output)
+            entry["transports"] = transports
+            entry["candidate_profile_count"] = CANDIDATE_PROFILE_COUNT
+            entry["transport_formats"] = sorted(CANDIDATE_EXPORT_FILENAMES)
+            proposed_exports = export_candidate_proposed_images(
+                candidate_document, output / "candidate-proposed-images",
+                output,
+            )
+            expected_proposed = len(bdfs) * CANDIDATE_PROFILE_COUNT
+            if len(proposed_exports) != expected_proposed:
+                raise ReportError(
+                    "candidate proposed-image export matrix is incomplete"
+                )
+            entry["proposed_image_exports"] = proposed_exports
+            entry["proposed_image_export_count"] = len(proposed_exports)
+            entry["proposed_image_formats"] = [
+                "json", "jsonl", "indexed-text", "raw-u32le",
+            ]
             capture_ages = []
             for card in candidate_document.get("cards", []):
                 physical = card.get("physical_capture") if isinstance(card, dict) else None
@@ -2222,6 +2963,12 @@ def run_candidates(args, project, output, runner, bdfs, ledger):
             entry["levels_skipped"] = {
                 "semantic-read": "candidate evidence was rejected"
             }
+    elif result["returncode"] == 0:
+        entry["status"] = "failed"
+        entry["reason"] = "candidate planner returned success without an output file"
+        entry["levels_skipped"] = {
+            "semantic-read": "candidate evidence was rejected"
+        }
     ledger.append(entry)
     if (result["returncode"] == 0 and destination.is_file() and
             entry["status"] == "completed"):
@@ -3032,6 +3779,7 @@ def build_report(args, project=None, runner=None):
             ))
         run_full_dump(args, project, output, runner, bdfs, ledger)
         run_candidates(args, project, output, runner, bdfs, ledger)
+        record_planning_layer_coverage(ledger)
         run_diagnostics(args, project, output, runner, bdfs, ledger)
         run_archbench(args, output, runner, bdfs, ledger)
         campaign_result, power["after_campaign"] = power_query(

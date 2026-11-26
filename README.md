@@ -49,8 +49,8 @@ in the [research runbook](docs/PROVENANCE.md#workspace-only-evidence).
 ArchBench 0.2.0 is a separately versioned, commit-pinned Git submodule under
 [`third_party/archbench_cuda13_5_v0_2_0`](./third_party/archbench_cuda13_5_v0_2_0/)
 from [anoane/archbench](https://github.com/anoane/archbench). It is offered under
-`AGPL-3.0-or-later OR MIT`, preserving its original MIT grant. On the Linux/CUDA
-host, build the SM80 worker once with `./bench selftest` and
+`AGPL-3.0-or-later`. On the Linux/CUDA host, build the SM80 worker once with
+`./bench selftest` and
 `./bench build --arch 80`; XRAY then discovers the initialized submodule and
 `build/bin/archbench_sm80` automatically. The exact URL, commit and tree are
 locked in [`docs/ARCHBENCH_SUBMODULE_LOCK.json`](./docs/ARCHBENCH_SUBMODULE_LOCK.json). The
@@ -1519,7 +1519,36 @@ before host access. Its diagnostics, ArchBench, and benchmark-power components
 remain explicit `not-requested` records. The separate `full-report-bench`
 frontend (alias `full-report+bench`) produces the same report plus diagnostics,
 ArchBench, transient 150-W-by-default power control, and sampled power
-envelopes.
+envelopes. It does not replace or weaken the planning path: both frontends run
+the same three-layer, non-authorizing planning and row-export workflow.
+
+The report contract is deliberately explicit:
+
+| Layer | Requested output | Completion proof |
+|---|---|---|
+| 1. Goal/checklist | All four models (`evidence-only`, `public-model`, `cross-checked-theory`, `compare`), each in JSON, JSONL, text, and canonical-JSON binary, with inert apply dry-run and OTP-readiness records | Every requested artifact is present in, and hash-bound by, the verified full-dump index |
+| 2. Exact-current candidate | All 18 profiles per card; the complete candidate in JSON, JSONL, text, and canonical-JSON binary; every proposed 512-row MAIN image in JSON, JSONL, indexed text, and raw u32le | Every transport is independently decoded and compared; every row image replays to the candidate's bound digest |
+| 3. Sealed manifest | All seven admitted v2 profiles per card | Each manifest is compiled and independently verified; no review receipt is created and execution remains unauthorized |
+
+The same full-dump also requests four observation transports, all nine covered
+MAIN row formats, all four RIR formats, and all four register formats. The nine
+MAIN formats are XRAY JSON/JSONL, indexed text, raw u32le, ffcalc JSON, xPatrik
+JSON, ga100-fuse-re JSON, dstoro projection JSON, and dstoro JSONL. Candidate
+row exports are neutral proposed-image transports and are kept distinct from
+observed MAIN rows. The RIR set is raw u32le, indexed text, JSON, and JSONL;
+the register set is JSON, JSONL, text, and address/value u32le. An explicitly
+selected glitch-read branch requests the same applicable exporters without
+relabeling its access state.
+
+This is evidence-gated. With no verified complete 512-row MAIN prerequisite, a
+dependent layer is recorded as `skipped`; with eligible MAIN input but a missing or
+inconsistent required output, it is `failed`. A verified live semantic capture
+can be promoted into the exact-current candidate layer; reviewed matching
+`--physical-capture` inputs remain available for imports. Neither mode invents
+rows, RIR, registers, defects, or a candidate. The compatible public-shaped
+serializers use the empirical retained-population interval `S=222`, `E=511`.
+That interval is explicitly **not** an official GA100 physical descriptor or
+an OTP-physics claim, and enabling those serializers grants no write authority.
 
 A complete maintenance-window campaign looks like this after replacing paths
 and reviewing every access acknowledgement:
@@ -2013,8 +2042,7 @@ Fabiano Anemone (`fabiano.anemone@gmail.com`) and licensed under the
 [GNU Affero General Public License, version 3 or later](./LICENSE). See
 [`NOTICE`](./NOTICE) for the exact boundary. Linux kernel helpers retain their
 file-level GPL-2.0 identifiers and Linux syscall-note exceptions. The independent
-ArchBench submodule is dual-licensed `AGPL-3.0-or-later OR MIT` and retains its
-original contributor copyright and MIT grant;
+ArchBench submodule is licensed `AGPL-3.0-or-later`;
 third-party evidence retains its own provenance and is not relicensed by XRAY.
 
 ## Credits and provenance

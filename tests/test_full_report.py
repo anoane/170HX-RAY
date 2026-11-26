@@ -53,6 +53,13 @@ class FakeRunner(object):
         }
 
 
+class FailingRunner(FakeRunner):
+    def run(self, argv, cwd=None, timeout=None):
+        result = super().run(argv, cwd=cwd, timeout=timeout)
+        result["returncode"] = 2
+        return result
+
+
 class FullReportTests(unittest.TestCase):
     def arguments(self, output):
         args = TOOL.build_parser().parse_args([
@@ -576,6 +583,430 @@ class FullReportTests(unittest.TestCase):
         self.assertTrue(benchmark.archbench)
         self.assertTrue(benchmark.set_power_limit)
 
+    def test_full_dump_commands_request_every_row_exporter(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "ordinary"
+            output.mkdir()
+            args = self.arguments(root / "unused")
+            args.no_live_capture = False
+            args.read_bundle = None
+            args.read_level = ["semantic-read"]
+            args.requested_read_levels = ["semantic-read"]
+            args.skipped_read_levels = {}
+            args.include_glitch_read = False
+            runner = FailingRunner()
+            ledger = []
+            TOOL.run_full_dump(
+                args, ROOT, output, runner, ["0000:01:00.0"], ledger
+            )
+            command = runner.calls[0]
+            self.assertIn("full-dump", command)
+            self.assertIn("--include-unsafe-projections", command)
+            self.assertEqual(
+                command[command.index("--fuseless-start") + 1], "222"
+            )
+            self.assertEqual(
+                command[command.index("--fuseless-end") + 1], "511"
+            )
+            self.assertEqual(
+                command[command.index("--row-view") + 1],
+                "locked_controller",
+            )
+            self.assertIn("not an official GA100", command[
+                command.index("--bounds-provenance") + 1
+            ])
+
+            glitch_output = root / "glitch"
+            glitch_output.mkdir()
+            args.include_glitch_read = True
+            glitch_runner = FailingRunner()
+            glitch_ledger = []
+            TOOL.run_glitch_dump(
+                args, ROOT, glitch_output, glitch_runner,
+                ["0000:01:00.0"], glitch_ledger,
+            )
+            glitch_command = glitch_runner.calls[0]
+            self.assertIn("--include-unsafe-projections", glitch_command)
+            self.assertEqual(
+                glitch_command[glitch_command.index("--row-view") + 1],
+                "unknown",
+            )
+            self.assertEqual(
+                glitch_command[glitch_command.index("--fuseless-start") + 1],
+                "222",
+            )
+
+    def test_live_semantic_full_dump_auto_promotes_candidate_input(self):
+        class BundleRunner(FakeRunner):
+            def run(inner_self, argv, cwd=None, timeout=None):
+                result = super(BundleRunner, inner_self).run(
+                    argv, cwd=cwd, timeout=timeout
+                )
+                argv = [str(value) for value in argv]
+                if "full-dump" in argv:
+                    bundle = Path(argv[argv.index("full-dump") + 1])
+                    capture = (
+                        bundle / "levels" / "semantic-read" /
+                        "observation" / "capture.json"
+                    )
+                    capture.parent.mkdir(parents=True)
+                    capture.write_text(json.dumps({
+                        "generated_utc": TOOL.now_utc().isoformat(),
+                        "cards": [{
+                            "card": {"domain_bdf": "0000:01:00.0"},
+                        }],
+                    }), encoding="utf-8")
+                    (bundle / "index.json").write_text(json.dumps({
+                        "request": {
+                            "include_unsafe_projections": True,
+                            "fuseless_bounds": [222, 511],
+                            "planning_models": list(
+                                TOOL.CHECKLIST_PLANNING_MODELS
+                            ),
+                        },
+                        "observations": [{
+                            "id": "observation-001",
+                            "requested_access": "semantic-read",
+                            "status": "complete",
+                            "artifact": (
+                                "levels/semantic-read/observation/capture.json"
+                            ),
+                            "transports": {
+                                "json": "a", "jsonl": "b", "text": "c",
+                                "binary_register_records": "d",
+                            },
+                        }],
+                        "specimens": [], "artifacts": [],
+                    }), encoding="utf-8")
+                    (bundle / "SHA256SUMS").write_text(
+                        "fixture\n", encoding="utf-8"
+                    )
+                return result
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "report"
+            output.mkdir()
+            args = self.arguments(root / "unused")
+            args.no_live_capture = False
+            args.read_bundle = None
+            args.read_level = ["semantic-read"]
+            args.requested_read_levels = ["semantic-read"]
+            args.skipped_read_levels = {}
+            args.include_glitch_read = False
+            args.physical_capture = []
+            ledger = []
+            TOOL.run_full_dump(
+                args, ROOT, output, BundleRunner(), ["0000:01:00.0"], ledger
+            )
+            self.assertEqual(len(args.physical_capture), 1)
+            self.assertTrue(Path(args.physical_capture[0]).is_file())
+            ordinary = next(
+                value for value in ledger
+                if value["id"] == "ordinary-read-dump-plan"
+            )
+            self.assertTrue(
+                ordinary["candidate_input_promotion"]["promoted"]
+            )
+
+    def test_candidate_layer_requests_and_decodes_all_lossless_formats(self):
+        document = {
+            "schema": "170hx-xray-candidate-plan-v1",
+            "cards": [], "execution_authorized": False,
+        }
+        canonical = json.dumps(
+            document, sort_keys=True, separators=(",", ":")
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            paths = {
+                "json": root / "candidate-plan.json",
+                "jsonl": root / "candidate-plan.jsonl",
+                "text": root / "candidate-plan.txt",
+                "canonical-json-bin": root / "candidate-plan.canonical-json.bin",
+            }
+            paths["json"].write_text(
+                json.dumps(document, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            paths["jsonl"].write_text(canonical + "\n", encoding="ascii")
+            paths["text"].write_text(
+                "header\n%s\n%s\n%s\n" % (
+                    TOOL.CANDIDATE_TEXT_BEGIN,
+                    json.dumps(document, indent=2, sort_keys=True),
+                    TOOL.CANDIDATE_TEXT_END,
+                ),
+                encoding="utf-8",
+            )
+            paths["canonical-json-bin"].write_bytes(canonical.encode("ascii"))
+            for output_format, path in paths.items():
+                self.assertEqual(
+                    TOOL.candidate_transport_document(path, output_format),
+                    document,
+                )
+
+            capture = root / "capture.json"
+            capture.write_text("{}\n", encoding="utf-8")
+            output = root / "report"
+            output.mkdir()
+            args = self.arguments(root / "unused")
+            args.physical_capture = [str(capture)]
+            runner = FailingRunner()
+            ledger = []
+            TOOL.run_candidates(
+                args, ROOT, output, runner, ["0000:01:00.0"], ledger
+            )
+            command = runner.calls[0]
+            self.assertIn("--export-all-dir", command)
+            self.assertEqual(
+                command[command.index("--output-format") + 1], "json"
+            )
+
+    def test_full_product_and_three_layer_coverage_fail_closed(self):
+        artifacts = []
+        observation_transports = {}
+        for name, kind in TOOL.OBSERVATION_TRANSPORT_KINDS.items():
+            path = "observation/%s" % name
+            artifacts.append({"path": path, "kind": kind})
+            observation_transports[name] = path
+        rir_outputs = []
+        for kind in TOOL.RIR_EXPORT_KINDS:
+            path = "rir/%s" % kind
+            artifacts.append({"path": path, "kind": kind})
+            rir_outputs.append(path)
+        planning = []
+        for model in TOOL.CHECKLIST_PLANNING_MODELS:
+            transports = {}
+            for name, kind_prefix in (
+                    ("json", "plan-"),
+                    ("jsonl", "plan-jsonl-"),
+                    ("text", "plan-text-"),
+                    ("binary_canonical_json", "plan-canonical-json-bin-")):
+                path = "planning/%s/%s" % (model, name)
+                artifacts.append({"path": path, "kind": kind_prefix + model})
+                transports[name] = path
+            apply_path = "planning/%s/apply" % model
+            readiness_path = "planning/%s/readiness" % model
+            artifacts.extend((
+                {"path": apply_path, "kind": "apply-dry-run-" + model},
+                {"path": readiness_path, "kind": "otp-readiness-" + model},
+            ))
+            planning.append({
+                "model": model, "status": "generated_non_executable",
+                "transports": transports,
+                "apply_dry_run": apply_path,
+                "otp_readiness": readiness_path,
+            })
+        main_outputs = []
+        for output_format in TOOL.ROW_EXPORT_FORMATS:
+            path = "main/%s" % output_format
+            artifacts.append({"path": path, "kind": "main-" + output_format})
+            main_outputs.append({
+                "format": output_format, "status": "exported", "path": path,
+            })
+        register_paths = []
+        for kind in TOOL.REGISTER_EXPORT_KINDS:
+            path = "register/%s" % kind
+            artifacts.append({"path": path, "kind": kind})
+            register_paths.append(path)
+        index = {
+            "request": {
+                "include_unsafe_projections": True,
+                "fuseless_bounds": [222, 511],
+                "planning_models": list(TOOL.CHECKLIST_PLANNING_MODELS),
+            },
+            "observations": [{
+                "id": "observation-001", "requested_access": "semantic-read",
+                "status": "complete", "transports": observation_transports,
+            }],
+            "artifacts": artifacts,
+            "specimens": [{
+                "id": "specimen-001", "observation": "observation-001",
+                "planning": planning,
+                "main": {"passes": [{
+                    "pass": 1, "complete": True,
+                    "outputs": main_outputs,
+                }]},
+                "register_exports": {
+                    "available": True, "formats": register_paths,
+                },
+                "rir": {
+                    "available": True,
+                    "passes": [{"outputs": rir_outputs}],
+                },
+            }],
+        }
+        coverage = TOOL.full_dump_product_coverage(index)
+        self.assertTrue(coverage["complete"], coverage)
+        index["specimens"][0]["main"]["passes"][0]["outputs"].pop()
+        incomplete = TOOL.full_dump_product_coverage(index)
+        self.assertFalse(incomplete["complete"])
+        self.assertEqual(TOOL._full_dump_coverage_status(incomplete), "failed")
+
+        ledger = [
+            TOOL.item("read-plan-export-coverage", "completed", "fixture"),
+            TOOL.item(
+                "exact-current-permanent-plans", "completed", "fixture"
+            ),
+            TOOL.item(
+                "guarded-experimental-write-manifests", "completed", "fixture"
+            ),
+        ]
+        TOOL.record_planning_layer_coverage(ledger)
+        self.assertEqual(
+            ledger[-1]["id"], "three-planning-layer-coverage"
+        )
+        self.assertEqual(ledger[-1]["status"], "completed")
+
+    def test_candidate_proposed_images_export_every_profile_in_four_formats(self):
+        words = [index for index in range(512)]
+        digest = TOOL._candidate_packed_sha256(words)
+        document = {"cards": [{
+            "bdf": "0000:01:00.0",
+            "profiles": [{
+                "model_id": profile,
+                "proposed_complete_image_rows": words,
+                "proposed_complete_image_u32le_sha256": digest,
+            } for profile in TOOL.CANDIDATE_PROFILES],
+        }]}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            entries = TOOL.export_candidate_proposed_images(
+                document, root / "exports", root,
+            )
+            self.assertEqual(len(entries), TOOL.CANDIDATE_PROFILE_COUNT)
+            self.assertEqual(
+                [value["profile_id"] for value in entries],
+                list(TOOL.CANDIDATE_PROFILES),
+            )
+            for value in entries:
+                self.assertEqual(
+                    set(value["formats"]),
+                    {"json", "jsonl", "indexed-text", "raw-u32le"},
+                )
+                for retained in value["formats"].values():
+                    self.assertTrue((root / retained["path"]).is_file())
+            malformed = copy.deepcopy(document)
+            malformed["cards"][0]["profiles"].reverse()
+            with self.assertRaisesRegex(
+                    TOOL.ReportError, "profile inventory is incomplete"):
+                TOOL.export_candidate_proposed_images(
+                    malformed, root / "reordered", root,
+                )
+
+    def test_glitch_product_coverage_is_scoped_and_fails_after_eligible_main(self):
+        class GlitchBundleRunner(FakeRunner):
+            def run(inner_self, argv, cwd=None, timeout=None):
+                result = super(GlitchBundleRunner, inner_self).run(
+                    argv, cwd=cwd, timeout=timeout
+                )
+                command = [str(value) for value in argv]
+                if "full-dump" in command:
+                    bundle = Path(command[command.index("full-dump") + 1])
+                    bundle.mkdir(parents=True)
+                    (bundle / "index.json").write_text(json.dumps({
+                        "request": {
+                            "include_unsafe_projections": True,
+                            "fuseless_bounds": [222, 511],
+                            "planning_models": list(
+                                TOOL.CHECKLIST_PLANNING_MODELS
+                            ),
+                        },
+                        "observations": [{
+                            "id": "glitch-observation",
+                            "requested_access": "glitch-read",
+                            "status": "complete", "transports": {},
+                        }],
+                        "artifacts": [],
+                        "specimens": [{
+                            "id": "glitch-specimen",
+                            "observation": "glitch-observation",
+                            "main": {"passes": [{
+                                "pass": 1, "complete": True, "outputs": [],
+                            }]},
+                        }],
+                    }), encoding="utf-8")
+                    (bundle / "SHA256SUMS").write_text(
+                        "fixture\n", encoding="utf-8"
+                    )
+                return result
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "report"
+            output.mkdir()
+            args = self.arguments(output)
+            args.include_glitch_read = True
+            ledger = []
+            TOOL.run_glitch_dump(
+                args, ROOT, output, GlitchBundleRunner(),
+                ["0000:01:00.0"], ledger,
+            )
+            coverage = next(
+                value for value in ledger
+                if value["id"] == "glitch-read-export-coverage"
+            )
+            self.assertEqual(coverage["status"], "failed")
+            self.assertEqual(
+                coverage["coverage"]["requested_access_scope"],
+                "glitch-read",
+            )
+
+    def test_candidate_success_without_output_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            capture = root / "capture.json"
+            capture.write_text("{}\n", encoding="utf-8")
+            output = root / "report"
+            output.mkdir()
+            args = self.arguments(output)
+            args.physical_capture = [str(capture)]
+            ledger = []
+            TOOL.run_candidates(
+                args, ROOT, output, FakeRunner(), ["0000:01:00.0"], ledger
+            )
+            self.assertEqual(ledger[0]["status"], "failed")
+            self.assertIn("without an output file", ledger[0]["reason"])
+            self.assertEqual(ledger[1]["status"], "skipped")
+
+    def test_candidate_rejects_wrong_selected_profile_inventory(self):
+        class CandidateRunner(FakeRunner):
+            def run(inner_self, argv, cwd=None, timeout=None):
+                result = super(CandidateRunner, inner_self).run(
+                    argv, cwd=cwd, timeout=timeout
+                )
+                command = [str(value) for value in argv]
+                if "--same-capture-context" in command:
+                    destination = Path(command[command.index("--output") + 1])
+                    document = self.candidate_document()
+                    document["cards"][0]["profiles"] = [
+                        {"model_id": profile}
+                        for profile in TOOL.CANDIDATE_PROFILES
+                    ]
+                    document["selected_profiles"] = list(
+                        reversed(TOOL.CANDIDATE_PROFILES)
+                    )
+                    destination.write_text(
+                        json.dumps(document), encoding="utf-8"
+                    )
+                return result
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            capture = root / "capture.json"
+            capture.write_text("{}\n", encoding="utf-8")
+            output = root / "report"
+            output.mkdir()
+            args = self.arguments(output)
+            args.physical_capture = [str(capture)]
+            ledger = []
+            TOOL.run_candidates(
+                args, ROOT, output, CandidateRunner(),
+                ["0000:01:00.0"], ledger,
+            )
+            self.assertEqual(ledger[0]["status"], "failed")
+            self.assertIn("exact ordered set", ledger[0]["reason"])
+
     def test_timeout_arguments_are_positive_and_integral_where_required(self):
         parser = TOOL.build_parser()
         parsed = parser.parse_args([
@@ -1042,6 +1473,12 @@ class FullReportTests(unittest.TestCase):
             )
             self.assertTrue(Path(args.physical_capture[0]).is_file())
             self.assertTrue((output / "read-dump-plan-bundle" / "index.json").is_file())
+            coverage = next(
+                value for value in ledger
+                if value["id"] == "read-plan-export-coverage"
+            )
+            self.assertEqual(coverage["status"], "skipped")
+            self.assertFalse(ledger[0]["complete_product_set"])
 
     def test_import_copy_refuses_symlink(self):
         with tempfile.TemporaryDirectory() as directory:

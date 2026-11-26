@@ -21,15 +21,25 @@ presence plus a digest. `git diff --check` passes for the research worktree.
 
 Those research/sanitized counts predate the source-only ArchBench extraction
 and are retained rather than silently rewritten. After the extraction, the
-initialized clean public tree passed all 312 discovered tests with one explicit
+initialized clean public tree passed all 320 discovered tests with one explicit
 skip for an unavailable optional fixture. A clean recursive clone passed all
-312 tests with 64 explicit skips for retained card evidence, the missing peer
+320 tests with 64 explicit skips for retained card evidence, the missing peer
 edition and unredistributed source lineage. A clean non-recursive clone passed
 the same suite with 65 skips: the additional skip is the test requiring
 initialized submodule Git metadata. Attempting an ArchBench report in that
 state failed with the actionable initialization instruction. Those skips are
 visible prerequisites, not synthetic passes; deterministic parser, planner and
 VFI state-machine coverage remains active.
+
+The 0.6.0 full-report contract was also replayed end to end against retained
+four-card evidence. The verified full-dump contained all nine MAIN formats,
+all four RIR formats, all four register formats, and all four checklist models
+for four cards and eight complete MAIN passes. The exact-current layer emitted
+the exact 18-profile inventory per card; all four whole-plan transports and
+all 72 proposed-image sets (four cards times 18 profiles, each in four row
+formats) replayed identically. The sealed layer compiled and independently
+verified all 28 admitted manifests (four cards times seven profiles). This was
+non-authorizing offline validation: no OTP execution path was invoked.
 
 ## Current addendum (supersedes historical toolchain blockers)
 
@@ -143,7 +153,7 @@ generates specimen-local output with `full-report` or `full-report-bench`.
 | Package `SHA256SUMS` | `SEALED`; exact digest is recorded in the non-self-referential `RELEASE_HASHES.md` ledger |
 | Git commit | recorded by repository history; query `git rev-parse HEAD` because a commit cannot embed its own hash |
 | GitHub contents | source-only; reports, raw/private evidence, caches and build products are excluded |
-| Licensing | first-party userspace/docs AGPL-3.0-or-later; kernel retains its stated GPL terms; the independent ArchBench submodule is `AGPL-3.0-or-later OR MIT` |
+| Licensing | first-party userspace/docs AGPL-3.0-or-later; kernel retains its stated GPL terms; the independent ArchBench submodule is `AGPL-3.0-or-later` |
 | Daybreak security scan | recorded after the clean repository is pushed; an absent or unfinished scan is never represented as clean |
 
 A failed or unfinished external scan with zero findings must never be reported

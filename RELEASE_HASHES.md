@@ -13,7 +13,7 @@ this Git history.
 | Component | Version |
 |---|---:|
 | Main XRAY frontend | 4.3.0 |
-| Full-report orchestrator | 0.5.0 |
+| Full-report orchestrator | 0.6.0 |
 | Diagnostics orchestrator | 2.0.0 |
 | Temperature probe | 1.7.0 |
 | Controller helper | 4.1.0 / UAPI ABI 6 |
@@ -21,20 +21,24 @@ this Git history.
 | Candidate planner | 0.5.0 |
 | VFI manifest compiler | 0.5.0 |
 | Full-release bundler | 0.4.0 |
-| ArchBench submodule | 0.2.0 at `ff3cc65815b71602760ff569d33f9a2fcdf32add`, `AGPL-3.0-or-later OR MIT` |
+| ArchBench submodule | 0.2.0 at `72ec2b6543e036012d7028f39333e8b16c699af7`, `AGPL-3.0-or-later` |
 
 ## Validation
 
 - Before the submodule-only packaging change, CPython 3.9, 3.14 and 3.15 each
   passed 307/307 research-edition and 308/308 sanitized-edition tests.
-- The current initialized public tree passed all 312 discovered tests with one
+- The current initialized public tree passed all 320 discovered tests with one
   explicit skip for an unavailable optional fixture.
-- A clean recursive clone passed all 312 tests with 64 explicit skips for
+- A clean recursive clone passed all 320 tests with 64 explicit skips for
   retained card evidence, the missing peer edition and unredistributed source
   lineage. A clean non-recursive clone passed the same suite with 65 skips and
   its ArchBench path failed closed with the documented submodule-init command.
 - The generated `UNLOCK_PLAN.md` contract exactly matches the frontend,
   candidate planner, compiler and independent runtime allowlists.
+- Retained four-card evidence replay completed all three non-authorizing
+  report-planning layers: 4 checklist models, 18 candidate profiles/card,
+  72 proposed row-image sets, and 28 compiled-and-verified sealed manifests;
+  every applicable row transport was independently checked.
 - Ruff `E9,F` and Pylint errors-only are clean.
 - Bandit reports zero high, two bounded medium and 20 low findings; their
   disposition is recorded in the static-validation ledger.
@@ -58,7 +62,7 @@ frozen:
 
 | Manifest entries | `SHA256SUMS` SHA-256 |
 |---:|---|
-| 60 | `e7bdc8e749de433ccddeb516d543b26551d5be1a2f7ecdd10554e9b4aa4589dd` |
+| 60 | `ed7d23aaf82d42c16f79eff39c3684368b102ccaa4b8b0e12f93e89eebf99721` |
 
 Repository commit identity is recorded by Git after the manifest is generated;
 a commit cannot embed its own final hash. Daybreak scan identity/status is
@@ -70,7 +74,6 @@ tree.
 Original first-party userspace source and documentation are copyright 2026
 Fabiano Anemone (`fabiano.anemone@gmail.com`) and licensed under
 AGPL-3.0-or-later. Kernel helpers retain their file-level GPL-2.0 terms and
-Linux-syscall-note exceptions. The independent ArchBench submodule is offered
-under `AGPL-3.0-or-later OR MIT`, preserving its original MIT grant and
-contributor copyright. See `LICENSE`, `NOTICE`, `.gitmodules`, and the pinned
+Linux-syscall-note exceptions. The independent ArchBench submodule is licensed
+under `AGPL-3.0-or-later`. See `LICENSE`, `NOTICE`, `.gitmodules`, and the pinned
 submodule's own licensing notices.

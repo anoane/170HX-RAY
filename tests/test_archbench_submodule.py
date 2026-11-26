@@ -13,8 +13,8 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 PATH = "third_party/archbench_cuda13_5_v0_2_0"
 URL = "https://github.com/anoane/archbench.git"
-COMMIT = "ff3cc65815b71602760ff569d33f9a2fcdf32add"
-TREE = "89e7500890f353e739da0c74abeb55dfb49c56a6"
+COMMIT = "72ec2b6543e036012d7028f39333e8b16c699af7"
+TREE = "e6d8550d3df9e44bb41dbe6e46be22c7628bb8c6"
 
 
 class ArchBenchSubmoduleTests(unittest.TestCase):
@@ -34,9 +34,8 @@ class ArchBenchSubmoduleTests(unittest.TestCase):
         self.assertEqual(lock["url"], URL)
         self.assertEqual(lock["commit"], COMMIT)
         self.assertEqual(lock["tree"], TREE)
-        self.assertEqual(lock["license_expression"],
-                         "AGPL-3.0-or-later OR MIT")
-        self.assertEqual(lock["expected_tracked_files"], 103)
+        self.assertEqual(lock["license_expression"], "AGPL-3.0-or-later")
+        self.assertEqual(lock["expected_tracked_files"], 102)
         self.assertEqual(lock["validation"], {
             "host_tests": "132/132 passed",
             "independent_alu_transitions": 532480,
@@ -85,11 +84,17 @@ class ArchBenchSubmoduleTests(unittest.TestCase):
             ["git", "ls-files", "-z"], cwd=str(submodule), check=True,
             capture_output=True,
         ).stdout.split(b"\0")
-        self.assertEqual(len([value for value in tracked if value]), 103)
+        self.assertEqual(len([value for value in tracked if value]), 102)
         self.assertTrue((submodule / "LICENSE").is_file())
-        self.assertTrue((submodule / "LICENSES" / "MIT.txt").is_file())
+        self.assertFalse((submodule / "LICENSES" / "MIT.txt").exists())
         metadata = (submodule / "pyproject.toml").read_text(encoding="utf-8")
-        self.assertIn('license = {text = "AGPL-3.0-or-later OR MIT"}', metadata)
+        self.assertIn('license = {text = "AGPL-3.0-or-later"}', metadata)
+        dual_spdx = subprocess.run(
+            ["git", "grep", "-n", "SPDX-License-Identifier:.*MIT"],
+            cwd=str(submodule), check=False, capture_output=True, text=True,
+        )
+        self.assertEqual(dual_spdx.returncode, 1)
+        self.assertEqual(dual_spdx.stdout, "")
 
 
 if __name__ == "__main__":
