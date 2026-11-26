@@ -1,5 +1,25 @@
 # 170HX-XRAY
 
+## ⚠️ DANGER — HIGHLY EXPERIMENTAL; IRREVERSIBLE USE CAN PERMANENTLY BRICK YOUR GPU
+
+> [!CAUTION]
+> **170HX-XRAY is experimental research software. Any irreversible operation is
+> extremely dangerous and is very likely to permanently brick or physically
+> damage a CMP 170HX or A100.** This especially includes voltage glitching
+> followed by OTP/fuse programming, but also includes fuse-controller writes,
+> unverified MMIO writes, VBIOS flashing, identity conversion, and power or
+> timing changes. A failed operation may leave the GPU unable to enumerate,
+> boot, accept another flash, or be recovered by software or external
+> programming equipment. There is no known universally safe fuse recipe: cards
+> have different existing fuses, defects, RIR state, board behavior, and
+> electrical margins. Successful software tests, dry runs, plans, checksums, or
+> results from another card do **not** establish electrical safety for yours.
+> Treat every write-capable or irreversible mode as destructive laboratory
+> work, assume total and unrecoverable loss of the card is possible, and remain
+> in read-only modes unless you knowingly accept that risk. The project and its
+> contributors provide no warranty, recovery guarantee, or assurance that an
+> unlock plan is safe for any specimen.
+
 > Some historical evidence names below refer to a larger private research
 > workspace. They resolve to the [provenance boundary](docs/PROVENANCE.md)
 > instead of pretending that unredistributed third-party material ships here.

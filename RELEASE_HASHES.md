@@ -70,7 +70,7 @@ frozen:
 
 | Manifest entries | `SHA256SUMS` SHA-256 |
 |---:|---|
-| 63 | `2b411ba701462e00fb2b3d8f92e48ef117227e1b16ddcf4b2e1471a171fcae1f` |
+| 63 | `8a3190f36089ca6bda54936bbe56441a74b5cb703c7bac57be1422be07471075` |
 
 Repository commit identity is recorded by Git after the manifest is generated;
 a commit cannot embed its own final hash. Daybreak scan identity/status is
