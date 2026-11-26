@@ -21,22 +21,22 @@ presence plus a digest. `git diff --check` passes for the research worktree.
 
 Those research/sanitized counts predate the source-only ArchBench extraction
 and are retained rather than silently rewritten. After the extraction, the
-initialized public tree passed all 324 discovered tests with one intentional
+initialized public tree passed all 326 discovered tests with one intentional
 skip for raw third-party source fixtures that are not redistributed. Their
 hashes and provenance remain bound by `evidence/public/public-source-lineage.json`,
 and the first-party public-plan audit is still exercised. Deterministic parser,
 planner and VFI state-machine coverage remains active.
 
 Two source-release clone gates were then run at
-`a3811d20ffe44785a7999e42c31f087118fd4d0b`. A clean recursive clone passed all
-324 discovered tests with 64 explicit skips and initialized ArchBench at the
+`8b457abe0369d84f325c10888c3c635652a30666`. A clean recursive clone passed all
+326 discovered tests with 64 explicit skips and initialized ArchBench at the
 exact pinned commit `72ec2b6543e036012d7028f39333e8b16c699af7`. A clean
-non-recursive clone passed all 324 with 65 explicit skips; the only additional
+non-recursive clone passed all 326 with 65 explicit skips; the only additional
 skip was the deliberately uninitialized submodule check. The other standalone
 clone skips are the expected retained-hardware, peer-edition, cold-verifier,
 receipt-integration, and raw-third-party fixtures that this source release does
-not redistribute. Neither clone had a failure, and both verified the complete
-63-entry root `SHA256SUMS` file.
+not redistribute. Neither clone had a failure. The final 63-entry root
+`SHA256SUMS` file is sealed after this ledger update and reverified below.
 
 The 0.7.0 full-report contract was also replayed end to end against retained
 four-card evidence. The verified full-dump contained all nine MAIN formats,
@@ -56,15 +56,19 @@ This was non-authorizing validation: no benchmark, power setter, live capture,
 OTP command, VBIOS write or reset ran.
 
 The final external demonstration copy is
-`170HX-XRAY_FULL_OUTPUT_2026-11-26_190139Z` (not committed to this source
+`170HX-XRAY_FULL_OUTPUT_2026-11-26_192125Z` (not committed to this source
 repository). Its `report-index.json` SHA-256 is
-`156db686cde96cccdc1979ea593da61ce11567a3d88c76469f8e79b2e1eb6bcf`,
+`22dcee983d84e4b2a65e8ee92ccae1e4e35798d45a4a191b1f2a7d7e676ffbaa`,
 the rendered Markdown SHA-256 is
-`cd40a1f49aad7b213322c1594066a435578bd96bb63d7cef947f4286f2a28d36`,
+`ca7d69b916b10b3fce1469aded657d95346559b0515b1cd75e78f46219ae89a2`,
 and its 1,357-entry outer `SHA256SUMS` SHA-256 is
-`0c7b74eb321b5fd4fb00581f9c1c77c83f221f4b10a3d535138cae04f3905fcd`.
+`333976d7edd921a088f24884977582db90ab76dc3d9f1d2b0fef4c9a72333fb6`.
 The exact-file-set, nested sibling checksum, route transports, modes, command
 journals and source-tool hashes were independently rechecked after transfer.
+The report binds full-report source SHA-256
+`77f07bf46bca87c578df1af75c5bd1966665ef97e90b20039355396f5e0fca28`;
+its supplied historical capture is classified by explicit provenance rather
+than timestamp and yields zero authoritative current manifests.
 
 ## Current addendum (supersedes historical toolchain blockers)
 

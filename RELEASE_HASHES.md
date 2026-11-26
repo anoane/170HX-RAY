@@ -27,18 +27,18 @@ this Git history.
 
 - Before the submodule-only packaging change, CPython 3.9, 3.14 and 3.15 each
   passed 307/307 research-edition and 308/308 sanitized-edition tests.
-- The current initialized public tree passed all 324 discovered tests with one
+- The current initialized public tree passed all 326 discovered tests with one
   intentional skip for raw third-party source fixtures that are represented by
   a hash-only lineage descriptor and are not redistributed.
-- A standalone clean recursive clone at commit `a3811d20ffe44785a7999e42c31f087118fd4d0b`
-  also discovered all 324 tests and passed with 64 explicit skips. Those skips
+- A standalone clean recursive clone at commit `8b457abe0369d84f325c10888c3c635652a30666`
+  also discovered all 326 tests and passed with 64 explicit skips. Those skips
   cover the intentionally unshipped retained-hardware fixtures, peer editions,
   and raw third-party fixture—not test failures. Its initialized ArchBench
   submodule matched the pinned `72ec2b6543e036012d7028f39333e8b16c699af7`.
-- A clean non-recursive clone passed the same 324-test suite with 65 explicit
+- A clean non-recursive clone passed the same 326-test suite with 65 explicit
   skips: the same 64 standalone-release skips plus the intentionally
   uninitialized ArchBench submodule check. Both clones verified the complete
-  63-entry release manifest before publication.
+  release-file set; the final 63-entry manifest is sealed below.
 - The generated `UNLOCK_PLAN.md` contract exactly matches the frontend,
   candidate planner, compiler and independent runtime allowlists.
 - Retained four-card evidence replay completed all three non-authorizing
@@ -70,7 +70,7 @@ frozen:
 
 | Manifest entries | `SHA256SUMS` SHA-256 |
 |---:|---|
-| 63 | `b8a329056cd9464a74b495d70c162fba2051393d7cd912c480b41563e1c5abd7` |
+| 63 | `2b411ba701462e00fb2b3d8f92e48ef117227e1b16ddcf4b2e1471a171fcae1f` |
 
 Repository commit identity is recorded by Git after the manifest is generated;
 a commit cannot embed its own final hash. Daybreak scan identity/status is
