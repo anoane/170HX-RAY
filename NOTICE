@@ -1,0 +1,21 @@
+170HX-XRAY licensing and copyright notice
+
+Copyright (C) 2026 Fabiano Anemone <fabiano.anemone@gmail.com>
+
+Unless a file or subtree states a different license, the original first-party
+userspace source code and documentation in this repository are licensed under
+the GNU Affero General Public License, version 3 or any later version
+(AGPL-3.0-or-later). The full license text is in LICENSE.
+
+The Linux kernel helpers under kernel/ retain their file-level GPL-2.0-only
+licenses (and the Linux-syscall-note exception where stated) for Linux-kernel
+compatibility. Those file-level SPDX identifiers control over the repository
+default.
+
+Vendored ArchBench files under third_party/archbench_cuda13_5_v0_2_0 retain
+their MIT license and ArchBench contributor copyright. Other third-party,
+historical, captured, generated, or evidentiary materials retain the licenses
+and provenance stated in their files; this notice does not claim authorship or
+relicense material that Fabiano Anemone does not own.
+
+SPDX-License-Identifier: AGPL-3.0-or-later

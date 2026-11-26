@@ -1,0 +1,16 @@
+* text=auto eol=lf
+
+*.bin binary
+*.csv binary
+*.gz binary
+*.ko binary
+*.png binary
+*.rom binary
+*.tar binary
+*.webp binary
+*.xz binary
+*.zip binary
+*.zst binary
+
+# Preserve byte-identical vendored source even when upstream keeps a blank EOF line.
+third_party/** whitespace=-blank-at-eof

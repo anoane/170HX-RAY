@@ -1,0 +1,47 @@
+.DS_Store
+._*
+__MACOSX/
+__pycache__/
+*.py[cod]
+
+# Local Python/tooling state
+.coverage
+.coverage.*
+.hypothesis/
+.mypy_cache/
+.nox/
+.pytest_cache/
+.ruff_cache/
+.tox/
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+CMakeCache.txt
+CMakeFiles/
+compile_commands.json
+
+# Out-of-tree or in-tree kernel build products
+kernel/*.ko
+kernel/*.mod
+kernel/*.mod.c
+kernel/*.o
+kernel/.*.cmd
+kernel/.tmp_versions/
+kernel/Module.symvers
+kernel/modules.order
+
+# Reports and device captures may contain host/card identity and raw fuse data.
+reports/
+evidence/private/
+evidence/raw/
+
+# Local configuration and credentials are never release inputs.
+.env
+.env.*
+*.key
+*.pem
+*.p12
+*.swp
+*~

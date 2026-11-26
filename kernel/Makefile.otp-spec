@@ -1,0 +1,18 @@
+# Host-only, hardware-inert state-machine test.  This is intentionally separate
+# from the kernel module Makefile and cannot build or load a programming ABI.
+CC ?= cc
+CFLAGS ?= -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+	-DXRAY_OTP_SPEC_ENABLE_FAULT_INJECTION=1
+
+.PHONY: all test clean
+
+all: 170hx_xray_otp_spec_test
+
+170hx_xray_otp_spec_test: 170hx_xray_otp_spec_test.c 170hx_xray_otp_spec.h
+	$(CC) $(CFLAGS) -o $@ 170hx_xray_otp_spec_test.c
+
+test: 170hx_xray_otp_spec_test
+	./170hx_xray_otp_spec_test
+
+clean:
+	rm -f 170hx_xray_otp_spec_test

@@ -1,0 +1,25 @@
+obj-m := 170hx_xray_therm.o
+KDIR ?= /lib/modules/$(shell uname -r)/build
+HOSTCC ?= cc
+UAPI_TEST := .170hx_xray_therm_uapi_abi_test
+
+.PHONY: all abi-test source-test clean
+
+all:
+	$(MAKE) -C $(KDIR) M=$(CURDIR) modules
+
+source-test:
+	@grep -Fq 'XRAY_THERM_CAPTURE_REQUIRES_WRITE(capture->flags)' \
+		170hx_xray_therm.c
+	@grep -Fq '!(file->f_mode & FMODE_WRITE)' 170hx_xray_therm.c
+	@grep -Fq 'xray_therm_ioctl_capture(file, argp)' 170hx_xray_therm.c
+
+abi-test: source-test
+	$(HOSTCC) $(HOSTCFLAGS) -std=c11 -Wall -Wextra -Werror -I$(CURDIR) \
+		170hx_xray_therm_uapi_abi_test.c -o $(UAPI_TEST)
+	./$(UAPI_TEST)
+	$(RM) $(UAPI_TEST)
+
+clean:
+	$(MAKE) -C $(KDIR) M=$(CURDIR) clean
+	$(RM) $(UAPI_TEST)
