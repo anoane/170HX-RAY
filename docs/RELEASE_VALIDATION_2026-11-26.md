@@ -28,9 +28,9 @@ and the first-party public-plan audit is still exercised. Deterministic parser,
 planner and VFI state-machine coverage remains active.
 
 Two source-release clone gates were then run at
-`8b457abe0369d84f325c10888c3c635652a30666`. A clean recursive clone passed all
+`b313530c716679c08c1fe22f38786ee8c7020bd3`. A clean recursive clone passed all
 326 discovered tests with 64 explicit skips and initialized ArchBench at the
-exact pinned commit `72ec2b6543e036012d7028f39333e8b16c699af7`. A clean
+exact pinned commit `e0852fa34933c605fca780180d23c13af2927265`. A clean
 non-recursive clone passed all 326 with 65 explicit skips; the only additional
 skip was the deliberately uninitialized submodule check. The other standalone
 clone skips are the expected retained-hardware, peer-edition, cold-verifier,

@@ -30,11 +30,11 @@ this Git history.
 - The current initialized public tree passed all 326 discovered tests with one
   intentional skip for raw third-party source fixtures that are represented by
   a hash-only lineage descriptor and are not redistributed.
-- A standalone clean recursive clone at commit `8b457abe0369d84f325c10888c3c635652a30666`
+- A standalone clean recursive clone at commit `b313530c716679c08c1fe22f38786ee8c7020bd3`
   also discovered all 326 tests and passed with 64 explicit skips. Those skips
   cover the intentionally unshipped retained-hardware fixtures, peer editions,
   and raw third-party fixture—not test failures. Its initialized ArchBench
-  submodule matched the pinned `72ec2b6543e036012d7028f39333e8b16c699af7`.
+  submodule matched the pinned `e0852fa34933c605fca780180d23c13af2927265`.
 - A clean non-recursive clone passed the same 326-test suite with 65 explicit
   skips: the same 64 standalone-release skips plus the intentionally
   uninitialized ArchBench submodule check. Both clones verified the complete
@@ -70,7 +70,7 @@ frozen:
 
 | Manifest entries | `SHA256SUMS` SHA-256 |
 |---:|---|
-| 63 | `8a3190f36089ca6bda54936bbe56441a74b5cb703c7bac57be1422be07471075` |
+| 63 | `100a1779678fb52ccb1dc99f0068321f87e02c6b7f43f9ece861cc8f9632d5ca` |
 
 Repository commit identity is recorded by Git after the manifest is generated;
 a commit cannot embed its own final hash. Daybreak scan identity/status is
