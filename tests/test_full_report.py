@@ -451,6 +451,223 @@ class FullReportTests(unittest.TestCase):
             },
         }]}
 
+    def route_layout_fixture(self, root, exact_current=True, bdfs=None):
+        root = Path(root)
+        report = root / "report"
+        report.mkdir()
+        bdfs = list(bdfs or ["0000:01:00.0"])
+        words, rir = [0] * 512, [0] * 8
+        digest = TOOL._candidate_packed_sha256(words)
+        candidate = self.candidate_document()
+        candidate.update({
+            "schema": "170hx-xray-candidate-plan-v1",
+            "selected_profiles": list(TOOL.CANDIDATE_PROFILES),
+            "execution_authorized": False,
+        })
+        template = candidate["cards"][0]
+        candidate["cards"] = []
+        for bdf in bdfs:
+            card = copy.deepcopy(template)
+            card["bdf"] = bdf
+            card["baseline"] = {"main_rows": words, "rir_rows": rir}
+            card["profiles"] = [{
+                "model_id": profile,
+                "proposed_complete_image_rows": words,
+                "proposed_complete_image_u32le_sha256": digest,
+            } for profile in TOOL.CANDIDATE_PROFILES]
+            candidate["cards"].append(card)
+        candidate_path = report / "exact-current-candidate-plans.json"
+        pretty = json.dumps(candidate, indent=2, sort_keys=True)
+        canonical = json.dumps(candidate, sort_keys=True, separators=(",", ":"))
+        candidate_path.write_text(pretty + "\n", encoding="utf-8")
+        exports = report / "candidate-plan-exports"
+        exports.mkdir()
+        (exports / "candidate-plan.json").write_text(pretty + "\n", encoding="utf-8")
+        (exports / "candidate-plan.jsonl").write_text(canonical + "\n", encoding="ascii")
+        (exports / "candidate-plan.txt").write_text(
+            "%s\n%s\n%s\n" % (
+                TOOL.CANDIDATE_TEXT_BEGIN, pretty, TOOL.CANDIDATE_TEXT_END,
+            ), encoding="utf-8",
+        )
+        (exports / "candidate-plan.canonical-json.bin").write_bytes(
+            canonical.encode("ascii")
+        )
+        proposed = TOOL.export_candidate_proposed_images(
+            candidate, report / "candidate-proposed-images", report,
+        )
+        baseline_root = report / "candidate-baselines"
+        baseline_root.mkdir()
+        manifests_root = report / "sealed-v2-manifests" / "manifests"
+        manifests_root.mkdir(parents=True)
+        baseline_paths = {}
+        manifest_paths = {}
+        for bdf in bdfs:
+            safe_bdf = bdf.replace(":", "-").replace(".", "-")
+            main_path = baseline_root / (safe_bdf + ".main.u32le")
+            rir_path = baseline_root / (safe_bdf + ".rir.u32le")
+            main_path.write_bytes(TOOL.struct.pack("<512I", *words))
+            rir_path.write_bytes(TOOL.struct.pack("<8I", *rir))
+            baseline_paths[bdf] = {"main": main_path, "rir": rir_path}
+            for profile in TOOL.MANIFEST_PROFILES:
+                path = manifests_root / (safe_bdf + "__" + profile + ".json")
+                path.write_text(json.dumps({
+                    "candidate_source": {
+                        "file_sha256": TOOL.sha256_file(candidate_path),
+                    },
+                    "binding": {
+                        "bdf": bdf, "profile_id": profile,
+                        "baseline_main_u32le_sha256":
+                            TOOL.sha256_file(main_path),
+                        "baseline_rir_u32le_sha256":
+                            TOOL.sha256_file(rir_path),
+                    },
+                    "execution_authorized": False,
+                    "hardware_backend_invoked": False,
+                }) + "\n", encoding="utf-8")
+                manifest_paths[(bdf, profile)] = path
+        result = TOOL.build_route_aware_outputs(
+            report, candidate_path, candidate, bdfs, proposed,
+            {
+                "complete": True,
+                "baseline_paths": baseline_paths,
+                "manifest_paths": manifest_paths,
+                "checksum_path": None,
+            }, exact_current=exact_current,
+        )
+        return report, result
+
+    def test_route_layout_separates_options_routes_and_overlays(self):
+        with tempfile.TemporaryDirectory() as directory:
+            report, result = self.route_layout_fixture(directory)
+            self.assertFalse(result["execution_authorized"])
+            self.assertEqual(result["otp_program_commands"], 0)
+            option = json.loads(
+                (report / "option-matrix" / "option-matrix.json").read_text()
+            )
+            self.assertFalse(option["cumulative"])
+            self.assertEqual(len(option["entries"]), TOOL.CANDIDATE_PROFILE_COUNT)
+            proposed = list((report / "option-matrix" / "cards").glob(
+                "*/*/*/proposed-main.*"
+            ))
+            self.assertEqual(len(proposed), TOOL.CANDIDATE_PROFILE_COUNT * 4)
+            manifest_sums = (
+                report / "option-matrix" / "SHA256SUMS"
+            ).read_text().splitlines()
+            self.assertEqual(len(manifest_sums), len(TOOL.MANIFEST_PROFILES))
+            self.assertTrue(all(
+                "current-baseline-sibling-manifests" in value
+                for value in manifest_sums
+            ))
+            route_index = json.loads(
+                (report / "routes" / "route-index.json").read_text()
+            )
+            self.assertEqual(route_index["route_ids"], [
+                "retain-cmp-20c2", "convert-a100-20b5",
+            ])
+            self.assertEqual(route_index["selected_bdfs"], ["0000:01:00.0"])
+            self.assertEqual(route_index["card_count"], 1)
+            self.assertEqual(route_index["supported_packaging_epoch"],
+                             "000-baseline-only")
+            self.assertFalse(
+                route_index["automatic_post_write_epoch_advancement_supported"]
+            )
+            self.assertFalse(route_index["option_matrix_cumulative"])
+            self.assertFalse(route_index["execution_authorized"])
+            for output_format, filename in TOOL.ROUTE_INDEX_EXPORT_FILENAMES.items():
+                replay = TOOL.structured_transport_document(
+                    report / "routes" / filename, output_format,
+                    TOOL.ROUTE_INDEX_TEXT_BEGIN, TOOL.ROUTE_INDEX_TEXT_END,
+                    "route-index",
+                )
+                self.assertEqual(replay, route_index)
+            for route_id in route_index["route_ids"]:
+                status = json.loads((
+                    report / "routes" / route_id / "cards" /
+                    "0000-01-00-0" / "route-status.json"
+                ).read_text())
+                self.assertEqual(status["current_authoritative_manifest_count"], 1)
+                self.assertEqual(status["current_next_segment"],
+                                 "010-common-topology")
+                self.assertFalse(status["execution_authorized"])
+                self.assertEqual(status["otp_program_commands"], 0)
+                self.assertIn("final_vbios_policy", status)
+                self.assertIn("specimen_ceiling_projection", status)
+            cmp_status = json.loads((
+                report / "routes" / "retain-cmp-20c2" / "cards" /
+                "0000-01-00-0" / "route-status.json"
+            ).read_text())
+            self.assertNotIn("identity_profile", cmp_status)
+            a100_status = json.loads((
+                report / "routes" / "convert-a100-20b5" / "cards" /
+                "0000-01-00-0" / "route-status.json"
+            ).read_text())
+            identity = next(
+                value for value in a100_status["segments"]
+                if value["segment_id"] == "030-identity-20b5-last"
+            )
+            self.assertFalse(identity["manifest_present"])
+            self.assertIn("withheld", identity["state"])
+            self.assertTrue((report / "routes" / "comparison" /
+                             "route-comparison.json").is_file())
+            self.assertTrue((report / "overlays" / "nvlink-rejected" /
+                             "overlay.json").is_file())
+
+    def test_route_layout_four_card_counts_and_historical_withholding(self):
+        bdfs = [
+            "0000:01:00.0", "0000:41:00.0",
+            "0000:82:00.0", "0000:c1:00.0",
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            report, _ = self.route_layout_fixture(
+                directory, exact_current=False, bdfs=bdfs,
+            )
+            option = json.loads(
+                (report / "option-matrix" / "option-matrix.json").read_text()
+            )
+            self.assertEqual(len(option["entries"]),
+                             4 * TOOL.CANDIDATE_PROFILE_COUNT)
+            self.assertEqual(len((report / "option-matrix" / "SHA256SUMS")
+                                 .read_text().splitlines()),
+                             4 * len(TOOL.MANIFEST_PROFILES))
+            statuses = list((report / "routes").glob(
+                "*-*-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]/cards/*/route-status.json"
+            ))
+            self.assertEqual(len(statuses), 8)
+            withheld_otp = 0
+            for path in statuses:
+                status = json.loads(path.read_text())
+                self.assertTrue(status["historical_review_only"])
+                self.assertIsNone(status["current_next_segment"])
+                self.assertEqual(status["current_authoritative_manifest_count"], 0)
+                route_document = json.loads((
+                    path.parents[2] / "route.json"
+                ).read_text())
+                self.assertIn("no manifest is a current next segment",
+                              route_document["current_epoch_manifest_policy"])
+                for segment in status["segments"]:
+                    if segment["segment_id"] == "020-isolated-pcie":
+                        withheld_otp += 1
+                    if segment["segment_id"] == "030-identity-20b5-last":
+                        withheld_otp += 1
+            self.assertEqual(withheld_otp, 12)
+
+    def test_route_layout_rejects_unsafe_bdf_and_artifact_binding(self):
+        with self.assertRaisesRegex(TOOL.ReportError, "unsafe route-layout BDF"):
+            TOOL._safe_bdf_name("../../escape")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            payload = root / "payload"
+            payload.write_text("bound\n", encoding="utf-8")
+            record = TOOL.artifact(payload, root)
+            record["sha256"] = "0" * 64
+            with self.assertRaisesRegex(TOOL.ReportError, "size/hash"):
+                TOOL._bound_artifact_path(record, root, "tampered")
+            with self.assertRaisesRegex(TOOL.ReportError, "escapes report"):
+                TOOL._bound_artifact_path({
+                    "path": "../payload", "bytes": payload.stat().st_size,
+                    "sha256": TOOL.sha256_file(payload),
+                }, root, "escape")
+
     def test_offline_report_records_every_skip_and_hashes(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "report"

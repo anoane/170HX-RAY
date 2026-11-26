@@ -884,6 +884,8 @@ BUNDLED_PUBLIC_SOURCE_PATHS = {
     "dstoro-plan-2026-11-17": "evidence/public/dstoro-plan.json",
 }
 
+BUNDLED_PUBLIC_LINEAGE_PATH = "evidence/public/public-source-lineage.json"
+
 PUBLIC_SOURCE_METADATA = {
     "cmpglitch-reported-card": {
         "repository_commit": "feb61e250b357cae5acd424a6685b2f27c1e806a",
@@ -897,6 +899,28 @@ PUBLIC_SOURCE_METADATA = {
         "expected_sha256": "49e43976220319853f7c30a2829e01bd937aa3ed33c0c22bf6d3f5c3438642f2",
     },
 }
+
+
+def load_bundled_public_lineage(package_root):
+    """Load hash-only lineage when third-party raw sources are not shipped."""
+    path = package_root / BUNDLED_PUBLIC_LINEAGE_PATH
+    if not path.is_file():
+        raise PlanFailure("missing public-source lineage %s" % path)
+    document = load_json_file(path, normalize_legacy=False)
+    if (document.get("schema") != "170hx-xray-public-source-lineage-v1" or
+            document.get("execution_authorized") is not False or
+            document.get("raw_sources_redistributed") is not False):
+        raise PlanFailure("public-source lineage policy mismatch")
+    sources = document.get("sources")
+    if not isinstance(sources, dict) or set(sources) != set(PUBLIC_SOURCE_METADATA):
+        raise PlanFailure("public-source lineage inventory mismatch")
+    for name, metadata in PUBLIC_SOURCE_METADATA.items():
+        source = sources.get(name)
+        if (not isinstance(source, dict) or
+                source.get("source_sha256") != metadata["expected_sha256"] or
+                source.get("raw_source_redistributed") is not False):
+            raise PlanFailure("public-source lineage mismatch for %s" % name)
+    return path, document
 
 
 def validate_public_faithful_audit(root, public_hashes):
@@ -3487,6 +3511,7 @@ def build_report(root, physical_dir, live_path, xray_path, selected_profile_ids=
         if item.get("public_source")
     })
     package_root = Path(__file__).resolve().parent.parent
+    bundled_lineage = None
     for name in required_public_sources:
         relative = PUBLIC_SOURCE_PATHS[name]
         path = root / relative
@@ -3494,19 +3519,35 @@ def build_report(root, physical_dir, live_path, xray_path, selected_profile_ids=
         if not path.is_file():
             reported_path = BUNDLED_PUBLIC_SOURCE_PATHS[name]
             path = package_root / reported_path
-        if not path.is_file():
-            raise PlanFailure("missing public source %s" % path)
-        actual_public_sha256 = sha256_file(path)
         expected_public_sha256 = PUBLIC_SOURCE_METADATA[name]["expected_sha256"]
-        if actual_public_sha256 != expected_public_sha256:
-            raise PlanFailure(
-                "public source hash mismatch for %s: expected %s, got %s"
-                % (reported_path, expected_public_sha256, actual_public_sha256)
-            )
+        if path.is_file():
+            actual_public_sha256 = sha256_file(path)
+            if actual_public_sha256 != expected_public_sha256:
+                raise PlanFailure(
+                    "public source hash mismatch for %s: expected %s, got %s"
+                    % (reported_path, expected_public_sha256,
+                       actual_public_sha256)
+                )
+            public_hashes[name] = {
+                "path": reported_path,
+                "sha256": actual_public_sha256,
+                "hash_verified": True,
+                "raw_source_present": True,
+                **PUBLIC_SOURCE_METADATA[name],
+            }
+            continue
+        if bundled_lineage is None:
+            bundled_lineage = load_bundled_public_lineage(package_root)
+        lineage_path, lineage_document = bundled_lineage
+        source = lineage_document["sources"][name]
         public_hashes[name] = {
-            "path": reported_path,
-            "sha256": actual_public_sha256,
-            "hash_verified": True,
+            "path": source["canonical_source"],
+            "sha256": expected_public_sha256,
+            "hash_verified": False,
+            "raw_source_present": False,
+            "hash_attestation_only": True,
+            "lineage_descriptor": BUNDLED_PUBLIC_LINEAGE_PATH,
+            "lineage_descriptor_sha256": sha256_file(lineage_path),
             **PUBLIC_SOURCE_METADATA[name],
         }
     if physical_capture_paths:

@@ -27,7 +27,7 @@ import subprocess
 import sys
 
 
-VERSION = "0.6.0"
+VERSION = "0.7.0"
 SCHEMA = "170hx-xray-full-report-v1"
 REPORT_MODES = ("report", "report+bench")
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -125,6 +125,59 @@ CANDIDATE_EXPORT_FILENAMES = {
 }
 CANDIDATE_TEXT_BEGIN = "----- BEGIN CANONICAL CANDIDATE PLAN JSON -----"
 CANDIDATE_TEXT_END = "----- END CANONICAL CANDIDATE PLAN JSON -----"
+ROUTE_EXPORT_FILENAMES = {
+    "json": "route.json",
+    "jsonl": "route.jsonl",
+    "text": "route.txt",
+    "canonical-json-bin": "route.canonical-json.bin",
+}
+ROUTE_INDEX_EXPORT_FILENAMES = {
+    "json": "route-index.json",
+    "jsonl": "route-index.jsonl",
+    "text": "route-index.txt",
+    "canonical-json-bin": "route-index.canonical-json.bin",
+}
+ROUTE_TEXT_BEGIN = "----- BEGIN CANONICAL XRAY ROUTE JSON -----"
+ROUTE_TEXT_END = "----- END CANONICAL XRAY ROUTE JSON -----"
+ROUTE_INDEX_TEXT_BEGIN = "----- BEGIN CANONICAL XRAY ROUTE INDEX JSON -----"
+ROUTE_INDEX_TEXT_END = "----- END CANONICAL XRAY ROUTE INDEX JSON -----"
+OPTION_PROPOSED_FILENAMES = {
+    "json": "proposed-main.json",
+    "jsonl": "proposed-main.jsonl",
+    "indexed-text": "proposed-main.indexed.txt",
+    "raw-u32le": "proposed-main.raw-u32le.bin",
+}
+CURRENT_ROUTE_PROFILE = "xray-common-permanent-topology"
+ROUTE_DEFINITIONS = (
+    {
+        "route_id": "retain-cmp-20c2",
+        "candidate_route_id": "path-b-retain-cmp-software-geometry-gen4",
+        "final_device_id": "10de:20c2",
+        "final_vbios_policy": "retain-cmp-vbios; software continuation is external",
+        "segments": (
+            ("010-common-topology", CURRENT_ROUTE_PROFILE, "current"),
+            ("020-isolated-pcie", "specimen-pcie-gen4-isolated", "withheld"),
+            ("030-retain-identity", None, "checkpoint"),
+            ("040-software-continuation", None, "external"),
+        ),
+    },
+    {
+        "route_id": "convert-a100-20b5",
+        "candidate_route_id": "path-a-a100-identity-vbios-software-sm",
+        "final_device_id": "10de:20b5",
+        "final_vbios_policy": (
+            "matching signed A100 VBIOS is an external action after terminal identity"
+        ),
+        "identity_profile": "specimen-a100-20b5-identity",
+        "segments": (
+            ("010-common-topology", CURRENT_ROUTE_PROFILE, "current"),
+            ("020-isolated-pcie", "specimen-pcie-gen4-isolated", "withheld"),
+            ("030-identity-20b5-last", "specimen-a100-20b5-identity", "withheld"),
+            ("040-signed-a100-vbios", None, "external"),
+            ("050-software-sm-continuation", None, "external"),
+        ),
+    },
+)
 CANDIDATE_PROFILES = (
     "specimen-80gb-hbm",
     "specimen-more-sm",
@@ -1780,6 +1833,70 @@ def candidate_transport_document(path, output_format):
     return _strict_json_payload(text, "candidate-%s" % output_format)
 
 
+def structured_transport_document(path, output_format, begin_marker,
+                                  end_marker, label):
+    """Independently decode one single-object JSON transport."""
+    raw = Path(path).read_bytes()
+    try:
+        text = raw.decode("utf-8" if output_format == "text" else "ascii")
+    except UnicodeError as exc:
+        raise ReportError(
+            "%s %s transport is not valid text: %s" %
+            (label, output_format, exc)
+        ) from exc
+    if output_format == "text":
+        begin = text.find(begin_marker + "\n")
+        end = text.rfind("\n" + end_marker)
+        if begin < 0 or end <= begin:
+            raise ReportError("%s text transport lacks canonical markers" % label)
+        text = text[begin + len(begin_marker) + 1:end]
+    elif output_format == "jsonl":
+        lines = text.splitlines()
+        if len(lines) != 1:
+            raise ReportError("%s JSONL transport must contain one record" % label)
+        text = lines[0]
+    elif output_format not in ("json", "canonical-json-bin"):
+        raise ReportError("unknown %s transport: %s" % (label, output_format))
+    return _strict_json_payload(text, "%s-%s" % (label, output_format))
+
+
+def write_structured_transports(document, directory, filenames,
+                                begin_marker, end_marker, label,
+                                report_root):
+    """Write and independently replay four equivalent route transports."""
+    canonical = json.dumps(
+        document, sort_keys=True, separators=(",", ":"), allow_nan=False,
+    )
+    pretty = json.dumps(
+        document, indent=2, sort_keys=True, allow_nan=False,
+    )
+    payloads = {
+        "json": (pretty + "\n", False),
+        "jsonl": (canonical + "\n", False),
+        "text": (
+            "%s\n%s\n%s\n" % (begin_marker, pretty, end_marker), False
+        ),
+        "canonical-json-bin": (canonical.encode("ascii"), True),
+    }
+    paths = {}
+    for output_format, filename in filenames.items():
+        payload, binary = payloads[output_format]
+        path = write_new(Path(directory) / filename, payload, binary)
+        replayed = structured_transport_document(
+            path, output_format, begin_marker, end_marker, label,
+        )
+        if replayed != document:
+            raise ReportError(
+                "%s %s transport differs semantically" %
+                (label, output_format)
+            )
+        paths[output_format] = path
+    return {
+        output_format: artifact(path, report_root)
+        for output_format, path in sorted(paths.items())
+    }
+
+
 def full_dump_product_coverage(index, requested_access_scope="ordinary"):
     """Prove complete products for eligible specimens in one access scope."""
     if requested_access_scope not in ("ordinary", "glitch-read", "all"):
@@ -2730,6 +2847,8 @@ def compile_candidate_manifests(project, output, runner, candidate_path,
     compiler = project / "tools" / "170hx_vfi_append_manifest.py"
     commands = []
     outputs = []
+    baseline_paths = {}
+    manifest_paths = {}
     for bdf in bdfs:
         card = by_bdf[bdf]
         baseline = card.get("baseline")
@@ -2750,6 +2869,7 @@ def compile_candidate_manifests(project, output, runner, candidate_path,
             baselines / (safe_bdf + ".rir.u32le"),
             struct.pack("<8I", *rir), True,
         )
+        baseline_paths[bdf] = {"main": main_path, "rir": rir_path}
         available = {
             value.get("model_id") for value in card.get("profiles", [])
             if isinstance(value, dict)
@@ -2789,6 +2909,7 @@ def compile_candidate_manifests(project, output, runner, candidate_path,
                     verify_record is not None and
                     verify_record["status"] == "completed"):
                 outputs.append(path)
+                manifest_paths[(bdf, profile)] = path
     expected = len(bdfs) * len(MANIFEST_PROFILES)
     complete = len(outputs) == expected
     checksum_path = None
@@ -2808,6 +2929,833 @@ def compile_candidate_manifests(project, output, runner, candidate_path,
         execution_authorized=False, commands=commands,
         checksum=(artifact(checksum_path, output) if checksum_path else None),
     ))
+    return {
+        "complete": complete,
+        "baseline_paths": baseline_paths,
+        "manifest_paths": manifest_paths,
+        "checksum_path": checksum_path,
+    }
+
+
+def _safe_bdf_name(bdf):
+    if not isinstance(bdf, str) or BDF_RE.fullmatch(bdf) is None:
+        raise ReportError("unsafe route-layout BDF: %r" % (bdf,))
+    return bdf.replace(":", "-").replace(".", "-")
+
+
+def _write_json_document(path, document):
+    return write_new(
+        path,
+        json.dumps(document, indent=2, sort_keys=True, allow_nan=False) + "\n",
+    )
+
+
+def _bound_artifact_path(record, report_root, label):
+    if not isinstance(record, dict) or not isinstance(record.get("path"), str):
+        raise ReportError("%s artifact binding is malformed" % label)
+    relative = Path(record["path"])
+    if relative.is_absolute() or ".." in relative.parts:
+        raise ReportError("%s artifact path escapes report" % label)
+    root = Path(report_root).resolve()
+    path = (root / relative).resolve()
+    try:
+        path.relative_to(root)
+    except ValueError as exc:
+        raise ReportError("%s artifact path escapes report" % label) from exc
+    if path.is_symlink() or not path.is_file():
+        raise ReportError("%s artifact is absent or non-regular" % label)
+    if (record.get("bytes") != path.stat().st_size or
+            record.get("sha256") != sha256_file(path)):
+        raise ReportError("%s artifact size/hash binding mismatch" % label)
+    return path
+
+
+def _route_segment_policy(segment_name, profile_id, disposition,
+                          exact_current=True):
+    common = {
+        "segment_id": segment_name,
+        "execution_authorized": False,
+        "hardware_backend_invoked": False,
+        "otp_program_commands": 0,
+        "programming_writes_performed": 0,
+    }
+    if disposition == "current":
+        common.update({
+            "profile_id": profile_id,
+            "state": (
+                "compiled-current-baseline-review-only" if exact_current else
+                "historical-review-only-requires-exact-current-recapture"
+            ),
+            "current_epoch": "000-baseline",
+            "is_current_next_segment": bool(exact_current),
+            "manifest_present": True,
+            "current_epoch_eligible": bool(exact_current),
+            "requires_cold_recapture_after_any_attempt": True,
+            "requires_replan_from_new_baseline_after_any_attempt": True,
+        })
+        if not exact_current:
+            common["reason"] = (
+                "historical evidence may be reviewed but cannot be promoted "
+                "to the current next segment; acquire exact-current MAIN/RIR"
+            )
+    elif disposition == "withheld":
+        common.update({
+            "profile_id": profile_id,
+            "state": "withheld-requires-cold-recapture-and-rebase",
+            "is_current_next_segment": False,
+            "manifest_present": False,
+            "requires_cold_recapture": True,
+            "requires_replan_from_new_baseline": True,
+            "reason": (
+                "the current-baseline sibling profile is not a sequential "
+                "route manifest; recapture cold MAIN/RIR and regenerate after "
+                "the prior segment is independently verified"
+            ),
+        })
+        if segment_name == "020-isolated-pcie":
+            common["required_input_epoch"] = "001-post-common-cold"
+        elif segment_name == "030-identity-20b5-last":
+            common["required_input_epoch"] = "002-post-pcie-cold"
+            common["final_otp_segment"] = True
+    elif disposition == "checkpoint":
+        common.update({
+            "state": "withheld-post-cold-device-20c2-checkpoint",
+            "is_current_next_segment": False,
+            "manifest_present": False,
+            "expected_device_id": "10de:20c2",
+            "otp_operation": False,
+            "requires_prior_cold_recapture": True,
+            "requires_route_rebase_and_validation": True,
+            "required_input_epoch": "002-post-pcie-cold",
+            "reason": (
+                "verify that the retained CMP device ID remains 20c2; this "
+                "checkpoint has no identity profile, manifest, or OTP write"
+            ),
+        })
+    elif disposition == "external":
+        action = "external-software-policy"
+        if segment_name == "040-signed-a100-vbios":
+            action = "external-signed-vbios-flash"
+        common.update({
+            "state": "withheld-external-action",
+            "is_current_next_segment": False,
+            "manifest_present": False,
+            "action_kind": action,
+            "external_to_full_report": True,
+            "requires_prior_cold_recapture": True,
+            "requires_route_rebase_and_validation": True,
+            "reason": (
+                "the full-report engine performs no VBIOS flash or software "
+                "policy change; release requires the preceding cold state"
+            ),
+        })
+        if segment_name == "040-software-continuation":
+            common["required_input_epoch"] = "002-post-pcie-cold"
+        elif segment_name == "040-signed-a100-vbios":
+            common["required_input_epoch"] = "003-post-identity-cold"
+        elif segment_name == "050-software-sm-continuation":
+            common["required_external_precondition"] = (
+                "signed A100 VBIOS migration independently completed and validated"
+            )
+    else:
+        raise ReportError("unknown route segment disposition: %s" % disposition)
+    return common
+
+
+def build_route_aware_outputs(output, candidate_path, candidate_document,
+                              bdfs, proposed_exports, manifest_result,
+                              exact_current=True):
+    """Build a non-executable, epoch-bound route and option-matrix tree."""
+    output = Path(output).resolve()
+    candidate_path = Path(candidate_path).resolve()
+    try:
+        candidate_path.relative_to(output)
+    except ValueError as exc:
+        raise ReportError("candidate plan is outside report root") from exc
+    if candidate_path.is_symlink() or not candidate_path.is_file():
+        raise ReportError("candidate plan is absent or non-regular")
+    if not manifest_result.get("complete"):
+        raise ReportError("route layout requires a complete verified manifest matrix")
+
+    cards = candidate_document.get("cards")
+    if not isinstance(cards, list):
+        raise ReportError("route layout candidate has no card inventory")
+    card_by_bdf = {}
+    for card in cards:
+        bdf = card.get("bdf") if isinstance(card, dict) else None
+        if not isinstance(bdf, str):
+            raise ReportError("route layout candidate has invalid card identity")
+        bdf = bdf.lower()
+        _safe_bdf_name(bdf)
+        if bdf in card_by_bdf:
+            raise ReportError("route layout candidate has duplicate BDF: %s" % bdf)
+        card_by_bdf[bdf] = card
+    if set(card_by_bdf) != set(bdfs) or len(bdfs) != len(set(bdfs)):
+        raise ReportError("route layout BDF inventory mismatch")
+
+    route_ids = [value["route_id"] for value in ROUTE_DEFINITIONS]
+    if (len(route_ids) != len(set(route_ids)) or
+            any(re.fullmatch(r"[a-z0-9-]+", value) is None
+                for value in route_ids)):
+        raise ReportError("route definition IDs are unsafe or duplicated")
+    allowed_profiles = set(CANDIDATE_PROFILES)
+    if any(re.fullmatch(r"[A-Za-z0-9_.-]+", value) is None
+           for value in allowed_profiles):
+        raise ReportError("candidate profile allowlist contains an unsafe ID")
+    expected_candidate_routes = {
+        value["candidate_route_id"] for value in ROUTE_DEFINITIONS
+    }
+    for definition in ROUTE_DEFINITIONS:
+        segment_ids = [value[0] for value in definition["segments"]]
+        if (len(segment_ids) != len(set(segment_ids)) or
+                any(re.fullmatch(r"[a-z0-9-]+", value) is None
+                    for value in segment_ids) or
+                any(profile is not None and profile not in allowed_profiles
+                    for _, profile, _ in definition["segments"])):
+            raise ReportError("route segment definition is unsafe or duplicated")
+    for bdf, card in card_by_bdf.items():
+        candidate_routes = card.get("dual_path_plans")
+        if (not isinstance(candidate_routes, list) or
+                {value.get("id") for value in candidate_routes
+                 if isinstance(value, dict)} != expected_candidate_routes or
+                len(candidate_routes) != len(expected_candidate_routes) or
+                any(not isinstance(value, dict) or
+                    value.get("execution_authorized") is not False
+                    for value in candidate_routes)):
+            raise ReportError("candidate route inventory mismatch: %s" % bdf)
+
+    proposed_by_key = {}
+    for record in proposed_exports:
+        if not isinstance(record, dict):
+            raise ReportError("proposed-image binding is malformed")
+        key = (record.get("bdf"), record.get("profile_id"))
+        if key in proposed_by_key:
+            raise ReportError("duplicate proposed-image binding: %r" % (key,))
+        if key[0] not in card_by_bdf or key[1] not in allowed_profiles:
+            raise ReportError("proposed-image binding is outside selected matrix")
+        formats = record.get("formats")
+        if (not isinstance(formats, dict) or
+                set(formats) != set(OPTION_PROPOSED_FILENAMES)):
+            raise ReportError("proposed-image formats are absent: %r" % (key,))
+        for name, bound in formats.items():
+            _bound_artifact_path(
+                bound, output, "%s/%s proposed %s" % (key[0], key[1], name),
+            )
+        proposed_by_key[key] = record
+    expected_proposed = {
+        (bdf, profile) for bdf in bdfs for profile in CANDIDATE_PROFILES
+    }
+    if set(proposed_by_key) != expected_proposed:
+        raise ReportError("proposed-image binding matrix is incomplete")
+
+    manifest_paths = manifest_result.get("manifest_paths")
+    baseline_paths = manifest_result.get("baseline_paths")
+    if not isinstance(manifest_paths, dict) or not isinstance(baseline_paths, dict):
+        raise ReportError("compiled manifest result is malformed")
+    expected_manifests = {
+        (bdf, profile) for bdf in bdfs for profile in MANIFEST_PROFILES
+    }
+    if set(manifest_paths) != expected_manifests or set(baseline_paths) != set(bdfs):
+        raise ReportError("compiled manifest/baseline matrix is incomplete")
+
+    candidate_artifact = artifact(candidate_path, output)
+    generated_utc = now_utc().isoformat()
+    shared = create_dir(output / "shared")
+    shared_evidence = create_dir(shared / "evidence")
+    shared_baselines = create_dir(shared / "baselines")
+    shared_checklists = create_dir(shared / "layer-1-checklists")
+    shared_bindings = {}
+    for bdf in bdfs:
+        safe_bdf = _safe_bdf_name(bdf)
+        card_root = create_dir(shared_baselines / safe_bdf)
+        source_main = Path(baseline_paths[bdf]["main"]).resolve()
+        source_rir = Path(baseline_paths[bdf]["rir"]).resolve()
+        for label, source in (("MAIN", source_main), ("RIR", source_rir)):
+            try:
+                source.relative_to(output)
+            except ValueError as exc:
+                raise ReportError("%s baseline is outside report root" % label) from exc
+            if source.is_symlink() or not source.is_file():
+                raise ReportError("%s baseline is absent or non-regular" % label)
+        main_copy = copy_regular_new(source_main, card_root / "main.u32le.bin")
+        rir_copy = copy_regular_new(source_rir, card_root / "rir.u32le.bin")
+        baseline = card_by_bdf[bdf].get("baseline")
+        main_words = _candidate_words(
+            baseline.get("main_rows") if isinstance(baseline, dict) else None,
+            512, "%s route MAIN" % bdf,
+        )
+        rir_words = _candidate_words(
+            baseline.get("rir_rows") if isinstance(baseline, dict) else None,
+            8, "%s route RIR" % bdf,
+        )
+        if (main_copy.read_bytes() != struct.pack("<512I", *main_words) or
+                rir_copy.read_bytes() != struct.pack("<8I", *rir_words)):
+            raise ReportError("shared baseline copy differs from candidate: %s" % bdf)
+        binding = {
+            "schema": "170hx-xray-route-baseline-binding-v1",
+            "bdf": bdf,
+            "epoch": "000-baseline",
+            "candidate_plan": candidate_artifact,
+            "main": artifact(main_copy, output),
+            "rir": artifact(rir_copy, output),
+            "same_capture_context": True,
+            "execution_authorized": False,
+            "hardware_backend_invoked": False,
+        }
+        binding_path = _write_json_document(
+            card_root / "baseline-binding.json", binding,
+        )
+        shared_bindings[bdf] = artifact(binding_path, output)
+    full_dump_index = output / "read-dump-plan-bundle" / "index.json"
+    evidence_index = {
+        "schema": "170hx-xray-shared-evidence-index-v1",
+        "candidate_plan": candidate_artifact,
+        "full_dump_index": (
+            artifact(full_dump_index, output)
+            if full_dump_index.is_file() and not full_dump_index.is_symlink()
+            else None
+        ),
+        "legacy_evidence_retained_in_place": True,
+        "execution_authorized": False,
+    }
+    evidence_index_path = _write_json_document(
+        shared_evidence / "index.json", evidence_index,
+    )
+    checklist_index_path = _write_json_document(
+        shared_checklists / "index.json", {
+            "schema": "170hx-xray-shared-layer1-index-v1",
+            "planning_models": list(CHECKLIST_PLANNING_MODELS),
+            "full_dump_index": evidence_index["full_dump_index"],
+            "legacy_products_retained_in_place": True,
+            "execution_authorized": False,
+        },
+    )
+    shared_index = {
+        "schema": "170hx-xray-shared-route-inputs-v1",
+        "generated_utc": generated_utc,
+        "candidate_plan": candidate_artifact,
+        "epoch": "000-baseline",
+        "baseline_bindings": [shared_bindings[bdf] for bdf in bdfs],
+        "evidence": artifact(evidence_index_path, output),
+        "layer_1_checklists": artifact(checklist_index_path, output),
+        "route_consumers": list(route_ids),
+        "exact_current": bool(exact_current),
+        "shared_means": (
+            "immutable evidence and baseline bindings consumed by both routes; "
+            "it does not imply that route segments are cumulative"
+        ),
+        "otp_execution": False,
+        "execution_authorized": False,
+    }
+    shared_index_path = _write_json_document(shared / "index.json", shared_index)
+
+    option_root = create_dir(output / "option-matrix")
+    option_cards = create_dir(option_root / "cards")
+    sibling_root = create_dir(
+        option_root / "current-baseline-sibling-manifests"
+    )
+    candidate_transport_copies = {}
+    legacy_candidate_transports = output / "candidate-plan-exports"
+    for output_format, filename in CANDIDATE_EXPORT_FILENAMES.items():
+        source = legacy_candidate_transports / filename
+        if source.is_symlink() or not source.is_file():
+            raise ReportError(
+                "legacy candidate %s transport is absent" % output_format
+            )
+        if candidate_transport_document(source, output_format) != candidate_document:
+            raise ReportError(
+                "legacy candidate %s transport differs semantically" %
+                output_format
+            )
+        copied = copy_regular_new(source, option_root / filename)
+        if candidate_transport_document(copied, output_format) != candidate_document:
+            raise ReportError(
+                "option-matrix candidate %s transport replay mismatch" %
+                output_format
+            )
+        candidate_transport_copies[output_format] = artifact(copied, output)
+    option_profile_bindings = {}
+    option_entries = []
+    option_manifest_copies = []
+    for bdf in bdfs:
+        safe_bdf = _safe_bdf_name(bdf)
+        option_card = create_dir(option_cards / safe_bdf)
+        profile_root = create_dir(option_card / "profiles")
+        sibling_card = create_dir(sibling_root / safe_bdf)
+        write_new(
+            sibling_card / "README-NOT-CUMULATIVE.md",
+            "# Current-baseline sibling manifests\n\n"
+            "These seven manifests are mutually exclusive alternatives compiled "
+            "from epoch `000-baseline`. They are not cumulative and are not an "
+            "execution order. After any attempted segment, cold-recapture and "
+            "rebase every later operation. No artifact here authorizes OTP.\n",
+        )
+        profiles = card_by_bdf[bdf].get("profiles")
+        profile_ids = [
+            value.get("model_id") if isinstance(value, dict) else None
+            for value in profiles or []
+        ]
+        if profile_ids != list(CANDIDATE_PROFILES):
+            raise ReportError("route option matrix profile order mismatch: %s" % bdf)
+        for ordinal, profile in enumerate(profiles):
+            profile_id = profile["model_id"]
+            profile_dir = create_dir(profile_root / profile_id)
+            compiled_manifest = None
+            if (bdf, profile_id) in manifest_paths:
+                source = Path(manifest_paths[(bdf, profile_id)]).resolve()
+                try:
+                    source.relative_to(output)
+                except ValueError as exc:
+                    raise ReportError("compiled manifest escaped report root") from exc
+                if source.is_symlink() or not source.is_file():
+                    raise ReportError("compiled manifest is absent/non-regular")
+                manifest_document = strict_json(source)
+                binding = manifest_document.get("binding")
+                candidate_source = manifest_document.get("candidate_source")
+                if (not isinstance(binding, dict) or
+                        not isinstance(candidate_source, dict) or
+                        binding.get("bdf") != bdf or
+                        binding.get("profile_id") != profile_id or
+                        binding.get("baseline_main_u32le_sha256") !=
+                        sha256_file(baseline_paths[bdf]["main"]) or
+                        binding.get("baseline_rir_u32le_sha256") !=
+                        sha256_file(baseline_paths[bdf]["rir"]) or
+                        candidate_source.get("file_sha256") !=
+                        candidate_artifact["sha256"] or
+                        manifest_document.get("execution_authorized") is not False or
+                        manifest_document.get("hardware_backend_invoked") is not False):
+                    raise ReportError("compiled manifest binding/safety mismatch")
+                copied = copy_regular_new(
+                    source, sibling_card / (profile_id + ".json"),
+                )
+                if sha256_file(copied) != sha256_file(source):
+                    raise ReportError("option-matrix manifest copy digest mismatch")
+                compiled_manifest = artifact(copied, output)
+                option_manifest_copies.append(copied)
+            proposed = proposed_by_key[(bdf, profile_id)]
+            proposed_copies = {}
+            for output_format, filename in OPTION_PROPOSED_FILENAMES.items():
+                source_proposed = _bound_artifact_path(
+                    proposed["formats"][output_format], output,
+                    "%s/%s proposed %s" %
+                    (bdf, profile_id, output_format),
+                )
+                copied_proposed = copy_regular_new(
+                    source_proposed, profile_dir / filename,
+                )
+                if sha256_file(copied_proposed) != sha256_file(source_proposed):
+                    raise ReportError("option-matrix proposed-image digest mismatch")
+                proposed_copies[output_format] = artifact(
+                    copied_proposed, output,
+                )
+            profile_binding = {
+                "schema": "170hx-xray-option-matrix-profile-v1",
+                "bdf": bdf,
+                "profile_id": profile_id,
+                "source_profile_ordinal": ordinal,
+                "epoch": "000-baseline",
+                "same_baseline_siblings": True,
+                "cumulative": False,
+                "execution_order": False,
+                "must_not_be_interpreted_as_route_sequence": True,
+                "candidate_plan": candidate_artifact,
+                "baseline_binding": shared_bindings[bdf],
+                "proposed_main_u32le_sha256": proposed.get(
+                    "proposed_main_u32le_sha256"
+                ),
+                "proposed_image_formats": proposed_copies,
+                "legacy_proposed_image_formats": proposed["formats"],
+                "compiled_manifest": compiled_manifest,
+                "compiled_manifest_status": (
+                    ("verified-current-baseline-sibling" if exact_current else
+                     "verified-historical-baseline-sibling-review-only")
+                    if compiled_manifest is not None else
+                    "candidate-only-not-compiled"
+                ),
+                "execution_authorized": False,
+                "hardware_backend_invoked": False,
+            }
+            binding_path = _write_json_document(
+                profile_dir / "profile-binding.json", profile_binding,
+            )
+            bound = artifact(binding_path, output)
+            option_profile_bindings[(bdf, profile_id)] = bound
+            option_entries.append({
+                "bdf": bdf, "profile_id": profile_id,
+                "binding": bound,
+                "compiled_manifest": compiled_manifest,
+            })
+    if len(option_manifest_copies) != len(bdfs) * len(MANIFEST_PROFILES):
+        raise ReportError("option-matrix sibling manifest count mismatch")
+    option_checksum_path = write_new(
+        option_root / "SHA256SUMS",
+        "".join(
+            "%s  %s\n" % (
+                sha256_file(path), path.relative_to(option_root).as_posix(),
+            )
+            for path in sorted(
+                option_manifest_copies, key=lambda value: value.as_posix()
+            )
+        ),
+    )
+    option_index = {
+        "schema": "170hx-xray-option-matrix-v1",
+        "generated_utc": generated_utc,
+        "epoch": "000-baseline",
+        "candidate_plan": candidate_artifact,
+        "candidate_plan_transports": candidate_transport_copies,
+        "same_baseline_siblings": True,
+        "exact_current": bool(exact_current),
+        "cumulative": False,
+        "execution_order": False,
+        "must_not_be_interpreted_as_route_sequence": True,
+        "profile_order_is_catalog_order_only": True,
+        "profiles_per_card": CANDIDATE_PROFILE_COUNT,
+        "compiled_manifests_per_card": len(MANIFEST_PROFILES),
+        "sibling_manifest_checksum": artifact(option_checksum_path, output),
+        "entries": option_entries,
+        "execution_authorized": False,
+        "hardware_backend_invoked": False,
+    }
+    option_index_path = _write_json_document(
+        option_root / "option-matrix.json", option_index,
+    )
+
+    overlays_root = create_dir(output / "overlays")
+    overlay_specs = (
+        ("sys-pipe-experimental", ("specimen-sys-pipe-to-defect-experimental",)),
+        ("media-mig-experimental", ("specimen-media-mig-to-defect-experimental",)),
+        ("nvlink-rejected", ("specimen-nvlink-global",)),
+    )
+    overlay_entries = []
+    for overlay_id, profile_ids in overlay_specs:
+        overlay_dir = create_dir(overlays_root / overlay_id)
+        bindings = [
+            {
+                "bdf": bdf, "profile_id": profile_id,
+                "option_matrix_binding": option_profile_bindings[(bdf, profile_id)],
+            }
+            for bdf in bdfs for profile_id in profile_ids
+        ]
+        overlay_document = {
+            "schema": "170hx-xray-route-overlay-v1",
+            "overlay_id": overlay_id,
+            "profile_ids": list(profile_ids),
+            "bindings": bindings,
+            "state": "separate-experimental-option-not-in-either-route",
+            "cumulative": False,
+            "requires_new_baseline_and_independent_review": True,
+            "execution_authorized": False,
+            "hardware_backend_invoked": False,
+            "otp_program_commands": 0,
+        }
+        if overlay_id == "nvlink-rejected":
+            overlay_document.update({
+                "state": "rejected-not-a-physical-per-link-enable-plan",
+                "reason": (
+                    "the three global IOCTRL disable bits do not establish "
+                    "the twelve-link physical map or a qualified enable plan"
+                ),
+            })
+        overlay_path = _write_json_document(
+            overlay_dir / "overlay.json", overlay_document,
+        )
+        overlay_entries.append({
+            "overlay_id": overlay_id,
+            "artifact": artifact(overlay_path, output),
+        })
+    overlays_index_path = _write_json_document(
+        overlays_root / "index.json", {
+            "schema": "170hx-xray-route-overlays-index-v1",
+            "overlays": overlay_entries,
+            "part_of_route_sequence": False,
+            "cumulative": False,
+            "execution_authorized": False,
+        },
+    )
+
+    routes_root = create_dir(output / "routes")
+    route_index_entries = []
+    for definition in ROUTE_DEFINITIONS:
+        route_id = definition["route_id"]
+        route_root = create_dir(routes_root / route_id)
+        route_cards_root = create_dir(route_root / "cards")
+        route_cards = []
+        for bdf in bdfs:
+            safe_bdf = _safe_bdf_name(bdf)
+            card_root = create_dir(route_cards_root / safe_bdf)
+            epochs_root = create_dir(card_root / "epochs")
+            route_epoch = create_dir(epochs_root / "000-baseline")
+            epoch_binding_document = {
+                "schema": "170hx-xray-route-epoch-binding-v1",
+                "route_id": route_id,
+                "bdf": bdf,
+                "epoch": "000-baseline",
+                "shared_baseline_binding": shared_bindings[bdf],
+                "candidate_plan": candidate_artifact,
+                "current_next_profile": CURRENT_ROUTE_PROFILE,
+                "execution_authorized": False,
+                "hardware_backend_invoked": False,
+            }
+            epoch_binding_path = _write_json_document(
+                route_epoch / "evidence-binding.json", epoch_binding_document,
+            )
+            epoch_binding = artifact(epoch_binding_path, output)
+            segments_root = create_dir(card_root / "segments")
+            segment_records = []
+            for segment_name, profile_id, disposition in definition["segments"]:
+                segment_root = create_dir(segments_root / segment_name)
+                status = _route_segment_policy(
+                    segment_name, profile_id, disposition, exact_current,
+                )
+                status.update({
+                    "schema": "170hx-xray-route-segment-status-v1",
+                    "route_id": route_id,
+                    "bdf": bdf,
+                    "epoch_binding": epoch_binding,
+                })
+                if disposition == "current":
+                    option_binding = option_profile_bindings[(bdf, profile_id)]
+                    option_binding_path = _bound_artifact_path(
+                        option_binding, output,
+                        "%s/%s option binding" % (bdf, profile_id),
+                    )
+                    option_document = strict_json(option_binding_path)
+                    source_manifest_record = option_document.get(
+                        "compiled_manifest"
+                    )
+                    _bound_artifact_path(
+                        source_manifest_record, output,
+                        "%s/%s option manifest" % (bdf, profile_id),
+                    )
+                    status["option_matrix_binding"] = option_binding
+                    status["source_manifest"] = source_manifest_record
+                    status["authoritative_manifest"] = source_manifest_record
+                    status["manifest_reference_only"] = True
+                    next_capture = {
+                        "schema": "170hx-xray-route-next-capture-v1",
+                        "route_id": route_id,
+                        "bdf": bdf,
+                        "after_segment": segment_name,
+                        "required_before_any_later_segment": True,
+                        "requirements": [
+                            "full cold power removal",
+                            "two agreeing complete MAIN captures",
+                            "two agreeing complete RIR captures",
+                            "post-cold functional validation",
+                            "regenerate every later manifest from the new baseline",
+                        ],
+                        "later_current-baseline_sibling_manifests_are_invalid": True,
+                        "execution_authorized": False,
+                    }
+                    next_capture_path = _write_json_document(
+                        segment_root / "next-required-capture.json", next_capture,
+                    )
+                    status["next_required_capture"] = artifact(
+                        next_capture_path, output,
+                    )
+                elif profile_id is not None:
+                    status["option_matrix_binding_for_research_only"] = (
+                        option_profile_bindings[(bdf, profile_id)]
+                    )
+                status_path = _write_json_document(
+                    segment_root / "segment-status.json", status,
+                )
+                segment_records.append({
+                    "segment_id": segment_name,
+                    "state": status["state"],
+                    "status": artifact(status_path, output),
+                    "manifest_present": status["manifest_present"],
+                })
+            current_segments = [
+                value for value in segment_records
+                if value["state"] == "compiled-current-baseline-review-only"
+            ]
+            expected_current_count = 1 if exact_current else 0
+            if (len(current_segments) != expected_current_count or
+                    (exact_current and current_segments[0]["segment_id"] !=
+                     "010-common-topology")):
+                raise ReportError("route contains an invalid current manifest set")
+            terminal_expectation = {
+                "schema": "170hx-xray-route-terminal-expectation-v1",
+                "route_id": route_id,
+                "bdf": bdf,
+                "expected_final_device_id": definition["final_device_id"],
+                "forecast_only_not_observed_state": True,
+                "requires_every_prior_cold_capture_and_validation": True,
+                "vbios_and_software_actions_are_external": True,
+                "execution_authorized": False,
+                "hardware_backend_invoked": False,
+                "otp_program_commands": 0,
+            }
+            if "identity_profile" in definition:
+                terminal_expectation.update({
+                    "identity_profile": definition["identity_profile"],
+                    "identity_must_be_final_otp_segment": True,
+                })
+            terminal_path = _write_json_document(
+                card_root / "terminal-expectation.json", terminal_expectation,
+            )
+            route_status = {
+                "schema": "170hx-xray-card-route-status-v1",
+                "route_id": route_id,
+                "candidate_route_id": definition["candidate_route_id"],
+                "bdf": bdf,
+                "final_device_id": definition["final_device_id"],
+                "final_vbios_policy": definition["final_vbios_policy"],
+                "specimen_ceiling_projection": card_by_bdf[bdf].get(
+                    "specimen_ceiling_projection"
+                ),
+                "current_epoch": "000-baseline",
+                "epoch_binding": epoch_binding,
+                "current_next_segment": (
+                    "010-common-topology" if exact_current else None
+                ),
+                "current_next_profile": CURRENT_ROUTE_PROFILE,
+                "current_epoch_compiled_manifest_count": 1,
+                "current_authoritative_manifest_count": expected_current_count,
+                "historical_review_only": not exact_current,
+                "segments": segment_records,
+                "terminal_expectation": artifact(terminal_path, output),
+                "all_later_segments_withheld": True,
+                "later_segments_require_cold_recapture_and_route_rebase": True,
+                "execution_authorized": False,
+                "hardware_backend_invoked": False,
+                "otp_program_commands": 0,
+                "programming_writes_performed": 0,
+            }
+            if "identity_profile" in definition:
+                route_status["identity_profile"] = definition["identity_profile"]
+                route_status["identity_is_final_otp_segment"] = True
+            status_path = _write_json_document(
+                card_root / "route-status.json", route_status,
+            )
+            route_cards.append({
+                "bdf": bdf,
+                "status": artifact(status_path, output),
+                "current_epoch": "000-baseline",
+                "current_next_segment": (
+                    "010-common-topology" if exact_current else None
+                ),
+            })
+        route_document = {
+            "schema": "170hx-xray-route-v1",
+            "generated_utc": generated_utc,
+            "route_id": route_id,
+            "candidate_route_id": definition["candidate_route_id"],
+            "final_device_id": definition["final_device_id"],
+            "final_vbios_policy": definition["final_vbios_policy"],
+            "cards": route_cards,
+            "current_epoch": "000-baseline",
+            "current_next_segment": (
+                "010-common-topology" if exact_current else None
+            ),
+            "current_next_profile": CURRENT_ROUTE_PROFILE,
+            "current_epoch_manifest_policy": (
+                "only the common-topology manifest is a current next segment"
+                if exact_current else
+                "historical review only; no manifest is a current next segment"
+            ),
+            "automatic_post_write_epoch_advancement_supported": False,
+            "later_segment_policy": (
+                "withheld until cold recapture, validation, and rebase"
+            ),
+            "historical_review_only": not exact_current,
+            "option_matrix_is_sibling_non_cumulative": True,
+            "vbios_and_software_actions_are_external": True,
+            "execution_authorized": False,
+            "hardware_backend_invoked": False,
+            "otp_program_commands": 0,
+            "programming_writes_performed": 0,
+        }
+        if "identity_profile" in definition:
+            route_document["identity_profile"] = definition["identity_profile"]
+            route_document["identity_is_final_otp_segment"] = True
+        route_transports = write_structured_transports(
+            route_document, route_root, ROUTE_EXPORT_FILENAMES,
+            ROUTE_TEXT_BEGIN, ROUTE_TEXT_END, "route", output,
+        )
+        route_index_entries.append({
+            "route_id": route_id,
+            "final_device_id": definition["final_device_id"],
+            "final_vbios_policy": definition["final_vbios_policy"],
+            "transports": route_transports,
+            "card_statuses": [value["status"] for value in route_cards],
+            "execution_authorized": False,
+        })
+    comparison_root = create_dir(routes_root / "comparison")
+    comparison_path = _write_json_document(
+        comparison_root / "route-comparison.json", {
+            "schema": "170hx-xray-route-comparison-v1",
+            "common_prefix": [
+                "010-common-topology", "cold-recapture-and-rebase",
+                "020-isolated-pcie", "cold-recapture-and-rebase",
+            ],
+            "routes": [{
+                "route_id": value["route_id"],
+                "final_device_id": value["final_device_id"],
+                "segments": [segment[0] for segment in definition["segments"]],
+            } for value, definition in zip(
+                route_index_entries, ROUTE_DEFINITIONS
+            )],
+            "differences": {
+                "retain-cmp-20c2": (
+                    "no identity OTP; retain 20c2 and use external CMP software"
+                ),
+                "convert-a100-20b5": (
+                    "20b5 identity is final OTP, then signed VBIOS and software are external"
+                ),
+            },
+            "option_matrix_is_not_route_order": True,
+            "execution_authorized": False,
+            "hardware_backend_invoked": False,
+            "otp_program_commands": 0,
+        },
+    )
+    route_index_document = {
+        "schema": "170hx-xray-route-index-v1",
+        "generated_utc": generated_utc,
+        "candidate_plan": candidate_artifact,
+        "shared_inputs": artifact(shared_index_path, output),
+        "option_matrix": artifact(option_index_path, output),
+        "overlays": artifact(overlays_index_path, output),
+        "routes": route_index_entries,
+        "comparison": artifact(comparison_path, output),
+        "route_ids": route_ids,
+        "selected_bdfs": list(bdfs),
+        "card_count": len(bdfs),
+        "current_epoch": "000-baseline",
+        "supported_packaging_epoch": "000-baseline-only",
+        "automatic_post_write_epoch_advancement_supported": False,
+        "post_write_epoch_policy": (
+            "retain the report unchanged; v0.7 does not promote a changed-card "
+            "capture to epoch 001/002 or compile the next route segment"
+        ),
+        "current_next_profile": CURRENT_ROUTE_PROFILE,
+        "current_manifest_count_per_card_per_route": (1 if exact_current else 0),
+        "historical_review_only": not exact_current,
+        "all_later_segments_withheld": True,
+        "option_matrix_same_baseline_siblings": True,
+        "option_matrix_cumulative": False,
+        "vbios_and_software_actions_are_external": True,
+        "execution_authorized": False,
+        "hardware_backend_invoked": False,
+        "otp_program_commands": 0,
+        "programming_writes_performed": 0,
+    }
+    route_index_transports = write_structured_transports(
+        route_index_document, routes_root, ROUTE_INDEX_EXPORT_FILENAMES,
+        ROUTE_INDEX_TEXT_BEGIN, ROUTE_INDEX_TEXT_END, "route-index", output,
+    )
+    return {
+        "shared_index": artifact(shared_index_path, output),
+        "option_matrix": artifact(option_index_path, output),
+        "overlays": artifact(overlays_index_path, output),
+        "route_index_transports": route_index_transports,
+        "routes": route_index_entries,
+        "execution_authorized": False,
+        "otp_program_commands": 0,
+    }
 
 
 def run_candidates(args, project, output, runner, bdfs, ledger):
@@ -2821,6 +3769,11 @@ def run_candidates(args, project, output, runner, bdfs, ledger):
             "no exact-current candidate exists to seal",
             execution_authorized=False,
         ))
+        ledger.append(item(
+            "route-aware-output-layout", "skipped",
+            "no exact-current candidate/baseline exists for route packaging",
+            execution_authorized=False, otp_program_commands=0,
+        ))
         return
     if len(args.physical_capture) not in (1, len(bdfs)):
         ledger.append(item(
@@ -2831,6 +3784,11 @@ def run_candidates(args, project, output, runner, bdfs, ledger):
             "guarded-experimental-write-manifests", "skipped",
             "candidate input cardinality was rejected",
             execution_authorized=False,
+        ))
+        ledger.append(item(
+            "route-aware-output-layout", "skipped",
+            "candidate input cardinality was rejected",
+            execution_authorized=False, otp_program_commands=0,
         ))
         return
     inputs = create_dir(output / "candidate-inputs")
@@ -2871,6 +3829,9 @@ def run_candidates(args, project, output, runner, bdfs, ledger):
         levels_requested=["semantic-read"], levels_completed=[],
         levels_skipped={},
     )
+    candidate_document = None
+    proposed_exports = []
+    historical = False
     if destination.is_symlink():
         entry["status"] = "failed"
         entry["reason"] = "candidate planner returned a symlink instead of an output file"
@@ -2933,8 +3894,13 @@ def run_candidates(args, project, output, runner, bdfs, ledger):
                 capture_ages.append(evidence_age_hours(generated))
             entry["candidate_capture_age_hours_max"] = max(capture_ages)
             entry["candidate_max_age_hours"] = args.candidate_max_age_hours
-            historical = max(capture_ages) > args.candidate_max_age_hours
+            offline_review_only = bool(args.no_live_capture)
+            historical = (
+                max(capture_ages) > args.candidate_max_age_hours or
+                offline_review_only
+            )
             entry["candidate_freshness"] = (
+                "offline-import-review-only" if offline_review_only else
                 "historical-explicitly-allowed" if historical and
                 args.allow_historical_candidate else
                 "fresh-same-capture-evidence" if not historical else
@@ -2945,6 +3911,12 @@ def run_candidates(args, project, output, runner, bdfs, ledger):
                 entry["reason"] = (
                     "same-capture evidence exceeds --candidate-max-age-hours; "
                     "historical data was not promoted as exact-current"
+                )
+            elif offline_review_only:
+                entry["reason"] = (
+                    "offline capture accepted for historical review under "
+                    "--allow-historical-candidate; freshness alone cannot prove "
+                    "that no intervening device-state change occurred"
                 )
             elif historical:
                 entry["reason"] = (
@@ -2973,21 +3945,57 @@ def run_candidates(args, project, output, runner, bdfs, ledger):
     if (result["returncode"] == 0 and destination.is_file() and
             entry["status"] == "completed"):
         try:
-            compile_candidate_manifests(
+            manifest_result = compile_candidate_manifests(
                 project, output, runner, destination, bdfs, ledger,
                 args.long_timeout,
             )
+            if not manifest_result["complete"]:
+                ledger.append(item(
+                    "route-aware-output-layout", "failed",
+                    "verified manifest matrix is incomplete",
+                    execution_authorized=False, otp_program_commands=0,
+                ))
+            else:
+                layout = build_route_aware_outputs(
+                    output, destination, candidate_document, bdfs,
+                    proposed_exports, manifest_result,
+                    exact_current=not historical,
+                )
+                ledger.append(item(
+                    "route-aware-output-layout", "completed",
+                    ("historical review-only routes emitted; no segment is "
+                     "promoted current until exact-current recapture")
+                    if historical else
+                    ("two epoch-bound routes emitted; only common topology "
+                     "is the current review-only next segment"),
+                    layout=layout, route_count=len(ROUTE_DEFINITIONS),
+                    cards=len(bdfs), historical_review_only=historical,
+                    execution_authorized=False, otp_program_commands=0,
+                ))
         except (OSError, UnicodeError, json.JSONDecodeError, ReportError) as exc:
+            if not any(
+                    value.get("id") == "guarded-experimental-write-manifests"
+                    for value in ledger):
+                ledger.append(item(
+                    "guarded-experimental-write-manifests", "failed",
+                    "manifest matrix rejected: %s" % exc,
+                    execution_authorized=False,
+                ))
             ledger.append(item(
-                "guarded-experimental-write-manifests", "failed",
-                "manifest matrix rejected: %s" % exc,
-                execution_authorized=False,
+                "route-aware-output-layout", "failed",
+                "route packaging rejected: %s" % exc,
+                execution_authorized=False, otp_program_commands=0,
             ))
     else:
         ledger.append(item(
             "guarded-experimental-write-manifests", "skipped",
             "candidate generation failed",
             execution_authorized=False,
+        ))
+        ledger.append(item(
+            "route-aware-output-layout", "skipped",
+            "candidate generation failed",
+            execution_authorized=False, otp_program_commands=0,
         ))
 
 
@@ -3480,14 +4488,47 @@ def render(document, output, commands):
         lines.append("| `%s` | %s |" % (
             level, levels.get(level, "not-requested")
         ))
+    route_component = next((
+        value for value in document["components"]
+        if value.get("id") == "route-aware-output-layout"
+    ), None)
+    route_summary = (
+        "Route-aware tree: unavailable; see the coverage-ledger status above."
+    )
+    if (isinstance(route_component, dict) and
+            route_component.get("status") == "completed"):
+        layout = route_component.get("layout")
+        transports = (
+            layout.get("route_index_transports")
+            if isinstance(layout, dict) else None
+        )
+        route_json = (
+            transports.get("json") if isinstance(transports, dict) else None
+        )
+        option_matrix = (
+            layout.get("option_matrix") if isinstance(layout, dict) else None
+        )
+        if (isinstance(route_json, dict) and
+                isinstance(route_json.get("path"), str) and
+                isinstance(option_matrix, dict) and
+                isinstance(option_matrix.get("path"), str)):
+            route_summary = (
+                "Route-aware artifacts: [`route-index.json`](%s), "
+                "[`option-matrix.json`](%s). Historical review only: `%s`; "
+                "execution authorized: `false`." % (
+                    esc(route_json["path"]), esc(option_matrix["path"]),
+                    esc(route_component.get("historical_review_only", False)),
+                )
+            )
     lines.extend([
         "",
         "Every completed full-dump level exports the complete XRAY JSON plus all supported JSON/JSONL/indexed-text/raw-u32le and explicitly acknowledged public-compatible formats. Exact-current append candidates require same-session native Level-3 evidence.",
         "", "## Permanent route models", "",
-        "1. **Retain CMP identity/VBIOS:** stage memory and compute prerequisites, activate topology, then optional global NVLink, defect-gated SYS_PIPE/media and isolated PCIe gates. Keep device ID `20c2`; apply the CMP driver/EFI memory geometry and PCIe policy needed after reset. This route normally exposes fuse-enabled SMs under the CMP VBIOS, while Gen4 and full memory geometry remain software-policy work.",
+        "1. **Retain CMP identity/VBIOS:** review the common-topology segment from epoch 000, then withhold isolated PCIe until a cold recapture and rebase. Keep device ID `20c2`; VBIOS and CMP driver/EFI memory/PCIe policy remain external. NVLink, SYS_PIPE and media are separate non-route overlays.",
         "2. **Convert to A100 identity/VBIOS:** perform and cold-verify the common topology stages first, prepare a recoverable A100 VBIOS migration, and place the `20b5` identity records last as their own commit domain. After the A100 VBIOS is proven, apply the required software SM/topology policy; A100 identity alone does not manufacture healthy SMs, HBM, media engines, NVLink routing, ECC, or MIG sufficiency.",
         "",
-        "Both routes are candidate models. Their ordered sealed-v2 manifests are unauthorized review artifacts, not an electrically qualified instruction to pulse OTP.",
+        "Both routes are non-authorizing models. The seven current-baseline sealed-v2 manifests per card are sibling, non-cumulative alternatives; only common topology is referenced as the initial current segment. Every later OTP segment is withheld for cold recapture and rebase.",
+        "", route_summary,
         "", "### Specimen-specific theoretical ceilings", "",
         "These are defect-preserving arithmetic ceilings, not promises that a die, VBIOS, firmware or driver will operate at the projected state.",
         "", "| BDF | Current / target HBM GiB | Usable FBP | Current / target SM | Usable TPC | Nondefective SYS_PIPE bits | Confidence HBM / SM / pipe |",

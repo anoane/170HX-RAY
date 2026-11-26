@@ -21,25 +21,39 @@ presence plus a digest. `git diff --check` passes for the research worktree.
 
 Those research/sanitized counts predate the source-only ArchBench extraction
 and are retained rather than silently rewritten. After the extraction, the
-initialized clean public tree passed all 320 discovered tests with one explicit
-skip for an unavailable optional fixture. A clean recursive clone passed all
-320 tests with 64 explicit skips for retained card evidence, the missing peer
-edition and unredistributed source lineage. A clean non-recursive clone passed
-the same suite with 65 skips: the additional skip is the test requiring
-initialized submodule Git metadata. Attempting an ArchBench report in that
-state failed with the actionable initialization instruction. Those skips are
-visible prerequisites, not synthetic passes; deterministic parser, planner and
-VFI state-machine coverage remains active.
+initialized public tree passed all 324 discovered tests with one intentional
+skip for raw third-party source fixtures that are not redistributed. Their
+hashes and provenance remain bound by `evidence/public/public-source-lineage.json`,
+and the first-party public-plan audit is still exercised. Deterministic parser,
+planner and VFI state-machine coverage remains active.
 
-The 0.6.0 full-report contract was also replayed end to end against retained
+The 0.7.0 full-report contract was also replayed end to end against retained
 four-card evidence. The verified full-dump contained all nine MAIN formats,
 all four RIR formats, all four register formats, and all four checklist models
-for four cards and eight complete MAIN passes. The exact-current layer emitted
+for four cards. The historical candidate layer emitted
 the exact 18-profile inventory per card; all four whole-plan transports and
 all 72 proposed-image sets (four cards times 18 profiles, each in four row
 formats) replayed identically. The sealed layer compiled and independently
-verified all 28 admitted manifests (four cards times seven profiles). This was
-non-authorizing offline validation: no OTP execution path was invoked.
+verified all 28 admitted same-baseline sibling manifests (four cards times seven
+profiles). The route layer emitted both final-state models, eight per-card
+statuses and four semantically equal transports for each route and the route
+index. Because the input was offline retained evidence, every route was marked
+historical review-only and exposed zero authoritative current manifests.
+Full-report 0.7 explicitly supports only initial `000-baseline` packaging; the
+epoch-001/002 transitions remain forecasts, not implemented promotion logic.
+This was non-authorizing validation: no benchmark, power setter, live capture,
+OTP command, VBIOS write or reset ran.
+
+The final external demonstration copy is
+`170HX-XRAY_FULL_OUTPUT_2026-11-26_190139Z` (not committed to this source
+repository). Its `report-index.json` SHA-256 is
+`156db686cde96cccdc1979ea593da61ce11567a3d88c76469f8e79b2e1eb6bcf`,
+the rendered Markdown SHA-256 is
+`cd40a1f49aad7b213322c1594066a435578bd96bb63d7cef947f4286f2a28d36`,
+and its 1,357-entry outer `SHA256SUMS` SHA-256 is
+`0c7b74eb321b5fd4fb00581f9c1c77c83f221f4b10a3d535138cae04f3905fcd`.
+The exact-file-set, nested sibling checksum, route transports, modes, command
+journals and source-tool hashes were independently rechecked after transfer.
 
 ## Current addendum (supersedes historical toolchain blockers)
 

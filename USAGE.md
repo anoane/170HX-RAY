@@ -329,10 +329,16 @@ FBPA/FBIO/ROP-L2 closure (64, 80 or 96 GiB at the qualified CMP density) and SM
 ceiling from direct GPC/TPC/PES closure (up to 128 SM). A defect ceiling is not
 health proof. The two route models remain distinct:
 
-1. retain `20c2`/CMP VBIOS, then apply the measured software memory/Gen4 policy;
-2. cold-validate common topology, fuse `20b5` identity last, migrate only to a
-   matching recoverable signed A100 VBIOS, then apply the measured software SM
-   policy if required.
+1. `retain-cmp-20c2`: cold-validate common topology, recapture and rebase before
+   isolated PCIe work, retain `20c2`, then perform any required external CMP
+   software continuation;
+2. `convert-a100-20b5`: cold-validate and rebase after common topology and again
+   after isolated PCIe, fuse paired `20b5` identity as the final OTP segment,
+   migrate only to a matching recoverable signed A100 VBIOS, then perform any
+   required external software SM continuation.
+
+These are staged route models, not two precompiled whole-card manifests. The
+initial exact-current evidence may compile only the common-topology segment.
 
 ### Feature goals and plan boundaries
 
@@ -396,7 +402,11 @@ IOCTRL group disables, not the twelve-link physical map. The historical 4.2
 validation retained 32 manifests; that count is not the current admission
 contract. See [`UNLOCK_PLAN.md`](UNLOCK_PLAN.md).
 NVJPG/OFA bits 146/371 remain inseparable; NVENC has no supported physical
-coordinate.
+coordinate. The 28 manifests in a four-card current-baseline matrix are seven
+siblings per card, not seven ordered operations per card. Applying one sibling
+invalidates the other six. Route execution begins, if independently reviewed
+and authorized elsewhere, with only the common-topology segment and then
+requires a cold capture and exact-current rebase before the next segment.
 
 ## Temperature diagnostics
 
@@ -564,18 +574,161 @@ planning pipeline; the `-bench` form only adds the benchmark campaign.
 ### Full-report planning and exporter contract
 
 For every selected card, both report modes request three independently checked
-planning layers:
+planning views. A higher numbered view is not permission to execute the lower
+numbered view and does not turn independent profile results into a sequence:
 
 1. The full-dump goal/checklist layer emits `evidence-only`, `public-model`,
    `cross-checked-theory`, and `compare`. Each model has JSON, JSONL, text, and
    canonical-JSON binary transports, plus an inert apply dry-run and OTP
    readiness record.
-2. The exact-current candidate layer emits all 18 profiles per card. The whole
+2. The exact-current option matrix emits all 18 profiles per card. The whole
    candidate is replay-checked as JSON, JSONL, text, and canonical-JSON binary;
    every profile's proposed complete 512-row MAIN image is also independently
-   replay-checked as JSON, JSONL, indexed text, and raw u32le.
-3. The sealed-manifest layer compiles and verifies the seven admitted v2
-   profiles per card. It does not review, execute, pulse, or authorize them.
+   replay-checked as JSON, JSONL, indexed text, and raw u32le. Each profile is
+   an independent answer from the same baseline, not a step to add to another
+   profile.
+3. The current-baseline sibling-manifest layer compiles and verifies the seven
+   admitted v2 profiles per card. All seven start from the same baseline and
+   are mutually exclusive alternatives. It does not review, execute, pulse, or
+   authorize them.
+
+### Route-aware output and sequencing
+
+Both commands generate both final-state route models automatically; there is no
+route-selection CLI flag and generating the route documents does not select a
+route for execution. The top-level layout is:
+
+```text
+<report>/
+|-- read-dump-plan-bundle/                 # compatibility evidence/export view
+|-- candidate-plan-exports/                # compatibility candidate view
+|   `-- candidate-plan.{json,jsonl,txt,canonical-json.bin}
+|-- candidate-proposed-images/<BDF>/<PROFILE>/  # compatibility row view
+|   `-- proposed-main.{json,jsonl,indexed.txt,raw-u32le.bin}
+|-- shared/
+|   |-- index.json
+|   |-- evidence/index.json
+|   |-- layer-1-checklists/index.json
+|   `-- baselines/<BDF>/
+|       |-- baseline-binding.json
+|       |-- main.u32le.bin
+|       `-- rir.u32le.bin
+|-- option-matrix/
+|   |-- option-matrix.json
+|   |-- SHA256SUMS
+|   |-- candidate-plan.{json,jsonl,txt,canonical-json.bin}
+|   |-- cards/<BDF>/profiles/<PROFILE>/
+|   |   |-- profile-binding.json           # all 18 options
+|   |   `-- proposed-main.{json,jsonl,indexed.txt,raw-u32le.bin}
+|   `-- current-baseline-sibling-manifests/<BDF>/
+|       |-- README-NOT-CUMULATIVE.md
+|       `-- <PROFILE>.json                 # exactly 7 sibling manifests
+|-- routes/
+|   |-- route-index.{json,jsonl,txt,canonical-json.bin}
+|   |-- retain-cmp-20c2/
+|   |   |-- route.{json,jsonl,txt,canonical-json.bin}
+|   |   `-- cards/<BDF>/
+|   |       |-- route-status.json
+|   |       |-- epochs/000-baseline/evidence-binding.json
+|   |       `-- segments/{010-common-topology,020-isolated-pcie,
+|   |                     030-retain-identity,040-software-continuation}/
+|   |-- convert-a100-20b5/
+|   |   |-- route.{json,jsonl,txt,canonical-json.bin}
+|   |   `-- cards/<BDF>/
+|   |       |-- route-status.json
+|   |       |-- epochs/000-baseline/evidence-binding.json
+|   |       `-- segments/{010-common-topology,020-isolated-pcie,
+|   |                     030-identity-20b5-last,040-signed-a100-vbios,
+|   |                     050-software-sm-continuation}/
+|   `-- comparison/route-comparison.json
+`-- overlays/
+    |-- index.json
+    |-- media-mig-experimental/overlay.json
+    |-- sys-pipe-experimental/overlay.json
+    `-- nvlink-rejected/overlay.json
+```
+
+This derived tree exists only when candidate generation and the complete
+verified sibling-manifest matrix succeed. Otherwise
+`route-aware-output-layout` is `skipped` or `failed`, and the report does not
+manufacture partial routes.
+
+`<BDF>` directory names use the safe full-BDF form, such as `0000-01-00-0`;
+the documents retain the canonical `0000:01:00.0` spelling. Every segment
+directory contains `segment-status.json`; `010-common-topology` additionally
+contains `next-required-capture.json` and a bound reference to the option
+matrix's authoritative manifest.
+
+`read-dump-plan-bundle/` contains observed evidence and the layer-1 checklist
+products. `shared/` adds immutable MAIN/RIR copies and small evidence/checklist
+indexes consumed by both routes. The legacy `candidate-plan-exports/` and
+`candidate-proposed-images/` paths remain for compatibility. `option-matrix/`
+contains hash-identical physical copies of all four candidate transports, all
+18 independent profile bindings and all four proposed-row transports per
+profile. HBM-only and SM-only are alternatives/subsets of common topology;
+SYS_PIPE-only and media/MIG overlap. Do not concatenate their row changes. The
+seven JSON files in each `current-baseline-sibling-manifests/<BDF>/` directory
+are also siblings, not an ordered manifest set: after any one is applied, all
+other siblings are stale.
+
+`routes/route-index.*` records both generated routes and their shared
+option/overlay bindings in JSON, JSONL, human text, and canonical-JSON binary.
+Each route has the same four representations plus one
+`route-status.json` per card. A card status identifies its baseline epoch, next
+segment and expected terminal identity, then references every segment status.
+Those records bind the sole current manifest or give the withheld/external
+reason, and always record `execution_authorized: false`.
+
+Segment status values are deliberately literal:
+
+| `state` | Meaning |
+|---|---|
+| `compiled-current-baseline-review-only` | The exact-current common-topology sibling is referenced as the sole next manifest; it remains unauthorized. |
+| `historical-review-only-requires-exact-current-recapture` | Historical evidence was explicitly accepted for review, but no segment is current. |
+| `withheld-requires-cold-recapture-and-rebase` | A later OTP segment has no route manifest yet; compile only after the preceding cold capture and rebase. |
+| `withheld-post-cold-device-20c2-checkpoint` | The CMP route must observe retained `20c2`; this is not an identity OTP operation. |
+| `withheld-external-action` | VBIOS or software work is outside full-report and has no fuse manifest. |
+
+These are route-segment states. The report component itself separately uses
+`completed`, `failed`, `skipped`, `not-yet-supported`, or `not-requested`.
+
+Only `010-common-topology` is eligible to reference a compiled manifest from
+an exact-current initial `000-baseline`; a historical review has no current
+segment. Its authoritative manifest is stored once in the option matrix rather
+than copied into both routes. Every subsequent hardware segment is withheld
+until a new cold capture and exact-current rebase. Version 0.7 packages only
+the initial `000-baseline` route state; it does **not** promote a changed-card
+capture to epoch 001/002 or compile the next route segment automatically:
+
+```text
+implemented now: 000-baseline -> review 010-common-topology only
+forecast only:   001-post-topology -> isolated PCIe after future rebase support
+forecast only:   002-post-pcie -> A100 identity after future rebase support
+```
+
+Never reuse the initial report's sibling manifests after the card changes, and
+never construct a later epoch by editing names or copying predicted row images.
+Retain the report unchanged and obtain a newly reviewed plan with tooling that
+explicitly supports the observed post-write epoch. The route document's
+`final_device_id` is a forecast, not an executable final image; only post-cold
+observation establishes terminal state.
+
+The `retain-cmp-20c2` route stops OTP planning after separately rebased common
+topology and PCIe stages. `030-retain-identity` is an expectation-only record,
+not a fuse operation; `040-software-continuation` describes an external EFI or
+driver policy and its validation obligations.
+
+The `convert-a100-20b5` route places paired identity at
+`030-identity-20b5-last`, after the independently rebased topology and PCIe
+epochs. It is terminal: the qualified append backend starts from a live `20c2`,
+so the route represents no OTP work after conversion. The signed matching A100
+VBIOS migration and any required software SM continuation are external-action
+records, never OTP manifests.
+
+Media/MIG and SYS_PIPE are experimental overlays; they are not silently added
+to either route. NVLink remains a rejected/research-only overlay because the
+known global mask does not provide a complete physical per-link enable plan.
+No route status presents these overlays as completed terminal-route segments.
 
 The ordinary full-dump request asks for every covered observation transport
 (JSON, JSONL, text, and binary register records), all nine MAIN row transports
@@ -592,8 +745,11 @@ A layer is `completed` only after its artifacts are independently replayed or
 verified. If no eligible complete 512-row MAIN or other prerequisite exists,
 the report records that layer as `skipped`; if eligible MAIN evidence exists
 but a required product is absent or inconsistent, it records `failed`. A
-verified live semantic capture may supply the exact-current candidate input;
-otherwise pass matching `--physical-capture` inputs. The exporter uses the
+verified live semantic capture in the same report invocation may supply the
+exact-current candidate input. `--no-live-capture` inputs, including a recently
+created imported bundle or `--physical-capture`, are always labeled historical
+review-only because file age cannot prove no intervening device-state change.
+The exporter uses the
 empirical `S=222`, `E=511` retained-population boundary only for compatible
 serialization. That interval is not an official GA100 physical descriptor,
 does not identify OTP physics, and grants no write authority.
@@ -631,6 +787,37 @@ python3 "$XRAY" full-report "$XRAY_OUT/report-maintenance" -- \
   --read-level passive --read-level bar-read --read-level semantic-read \
   --physical-capture /absolute/path/to/native-level3.json
 ```
+
+The command emits both route models. Inspect the route index, every card status,
+the non-cumulative warning, and the available first-segment manifest reference:
+
+```sh
+XRAY_REPORT="$XRAY_OUT/report-maintenance"
+python3 -m json.tool "$XRAY_REPORT/routes/route-index.json"
+find "$XRAY_REPORT/routes" -name route-status.json -print \
+  -exec python3 -m json.tool '{}' \;
+find "$XRAY_REPORT/routes" -path '*/segments/010-common-topology/*' -type f \
+  -print
+find "$XRAY_REPORT/option-matrix/current-baseline-sibling-manifests" \
+  -name '*.json' -print
+python3 -m json.tool "$XRAY_REPORT/option-matrix/option-matrix.json"
+```
+
+To inspect all four equivalent route representations without confusing them for
+four different plans:
+
+```sh
+ls -l "$XRAY_REPORT/routes"/route-index.*
+ls -l "$XRAY_REPORT/routes/retain-cmp-20c2"/route.*
+ls -l "$XRAY_REPORT/routes/convert-a100-20b5"/route.*
+```
+
+After an independently authorized segment and required cold validation, retain
+the old report unchanged. Capture the changed card, but do not feed it to v0.7
+and assume that a newly generated `000-baseline` tree represents epoch 001.
+Automatic post-write epoch advancement is not implemented. Do not copy an old
+manifest, edit `current_epoch`, or rename a withheld marker; use separately
+reviewed tooling that explicitly supports the observed post-write epoch.
 
 Repeat `--physical-capture` and the corresponding card selector as required by
 the exact-current multi-card campaign. A report with missing or historical

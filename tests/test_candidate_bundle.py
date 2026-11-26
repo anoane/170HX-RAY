@@ -268,6 +268,26 @@ class CandidateBundleTests(unittest.TestCase):
         self.assertTrue(result["all_models_pass"])
         self.assertTrue(result["lineage_hashes_match"])
 
+    def test_hash_only_public_lineage_is_complete_and_non_authorizing(self):
+        path, document = TOOL.load_bundled_public_lineage(ROOT)
+        self.assertEqual(
+            path, ROOT / "evidence/public/public-source-lineage.json"
+        )
+        self.assertFalse(document["raw_sources_redistributed"])
+        self.assertFalse(document["execution_authorized"])
+        self.assertEqual(set(document["sources"]),
+                         set(TOOL.PUBLIC_SOURCE_METADATA))
+        public_hashes = {
+            name: {"sha256": source["source_sha256"]}
+            for name, source in document["sources"].items()
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            result = TOOL.validate_public_faithful_audit(
+                Path(directory), public_hashes
+            )
+        self.assertTrue(result["all_models_pass"])
+        self.assertTrue(result["lineage_hashes_match"])
+
 
 if __name__ == "__main__":
     unittest.main()

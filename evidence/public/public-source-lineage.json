@@ -1,0 +1,22 @@
+{
+  "execution_authorized": false,
+  "licensing_boundary": "This first-party descriptor records hashes and provenance only. It does not redistribute or relicense the referenced third-party source bytes.",
+  "raw_sources_redistributed": false,
+  "schema": "170hx-xray-public-source-lineage-v1",
+  "sources": {
+    "cmpglitch-reported-card": {
+      "canonical_source": "https://github.com/EthanZhangCN/cmp170hx-final-crack/blob/feb61e250b357cae5acd424a6685b2f27c1e806a/CMPGlitch/cmp_burn.md",
+      "commit": "feb61e250b357cae5acd424a6685b2f27c1e806a",
+      "raw_source_redistributed": false,
+      "source_date": "2026-11-21",
+      "source_sha256": "46431a51e57994f1b61edc779071a879c908ab141268e6590f96a29751d65841"
+    },
+    "dstoro-plan-2026-11-17": {
+      "canonical_source": "retained Danylo Storozhev (@dstoro) public-plan evidence dated 2026-11-17",
+      "commit": null,
+      "raw_source_redistributed": false,
+      "source_date": "2026-11-17",
+      "source_sha256": "49e43976220319853f7c30a2829e01bd937aa3ed33c0c22bf6d3f5c3438642f2"
+    }
+  }
+}

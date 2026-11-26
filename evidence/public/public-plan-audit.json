@@ -1,0 +1,1452 @@
+{
+  "comparison": [
+    {
+      "chain_block": "1:5",
+      "models": {
+        "cmpglitch-reported-card": 32775,
+        "dstoro-plan-2026-11-17": 32775,
+        "ff-burn-map-gpu-cce31172": 32775,
+        "row486-canary-failed-card": 39015
+      },
+      "same_final_value_where_present": false
+    },
+    {
+      "chain_block": "1:6",
+      "models": {
+        "cmpglitch-reported-card": 1537,
+        "dstoro-plan-2026-11-17": 1537,
+        "ff-burn-map-gpu-cce31172": 1537,
+        "row486-canary-failed-card": 1537
+      },
+      "same_final_value_where_present": true
+    },
+    {
+      "chain_block": "1:7",
+      "models": {
+        "cmpglitch-reported-card": 384,
+        "dstoro-plan-2026-11-17": 384,
+        "ff-burn-map-gpu-cce31172": 384,
+        "row486-canary-failed-card": 384
+      },
+      "same_final_value_where_present": true
+    },
+    {
+      "chain_block": "1:8",
+      "models": {
+        "cmpglitch-reported-card": 63494,
+        "dstoro-plan-2026-11-17": 63510,
+        "ff-burn-map-gpu-cce31172": 63494,
+        "row486-canary-failed-card": 63494
+      },
+      "same_final_value_where_present": false
+    },
+    {
+      "chain_block": "1:11",
+      "models": {
+        "cmpglitch-reported-card": 0,
+        "dstoro-plan-2026-11-17": 0,
+        "ff-burn-map-gpu-cce31172": 32768,
+        "row486-canary-failed-card": 0
+      },
+      "same_final_value_where_present": false
+    },
+    {
+      "chain_block": "1:12",
+      "models": {
+        "cmpglitch-reported-card": 0,
+        "dstoro-plan-2026-11-17": 2040,
+        "ff-burn-map-gpu-cce31172": 0,
+        "row486-canary-failed-card": 8192
+      },
+      "same_final_value_where_present": false
+    },
+    {
+      "chain_block": "1:13",
+      "models": {
+        "cmpglitch-reported-card": null,
+        "dstoro-plan-2026-11-17": null,
+        "ff-burn-map-gpu-cce31172": null,
+        "row486-canary-failed-card": 64
+      },
+      "same_final_value_where_present": true
+    },
+    {
+      "chain_block": "1:14",
+      "models": {
+        "cmpglitch-reported-card": 0,
+        "dstoro-plan-2026-11-17": 0,
+        "ff-burn-map-gpu-cce31172": 0,
+        "row486-canary-failed-card": 0
+      },
+      "same_final_value_where_present": true
+    },
+    {
+      "chain_block": "1:15",
+      "models": {
+        "cmpglitch-reported-card": 0,
+        "dstoro-plan-2026-11-17": 49152,
+        "ff-burn-map-gpu-cce31172": 0,
+        "row486-canary-failed-card": 0
+      },
+      "same_final_value_where_present": false
+    },
+    {
+      "chain_block": "1:16",
+      "models": {
+        "cmpglitch-reported-card": 0,
+        "dstoro-plan-2026-11-17": 1,
+        "ff-burn-map-gpu-cce31172": 0,
+        "row486-canary-failed-card": 0
+      },
+      "same_final_value_where_present": false
+    },
+    {
+      "chain_block": "1:19",
+      "models": {
+        "cmpglitch-reported-card": 16896,
+        "dstoro-plan-2026-11-17": 16896,
+        "ff-burn-map-gpu-cce31172": 16896,
+        "row486-canary-failed-card": 16896
+      },
+      "same_final_value_where_present": true
+    },
+    {
+      "chain_block": "1:20",
+      "models": {
+        "cmpglitch-reported-card": 6144,
+        "dstoro-plan-2026-11-17": 6144,
+        "ff-burn-map-gpu-cce31172": 6144,
+        "row486-canary-failed-card": 6144
+      },
+      "same_final_value_where_present": true
+    },
+    {
+      "chain_block": "1:23",
+      "models": {
+        "cmpglitch-reported-card": 4072,
+        "dstoro-plan-2026-11-17": 4072,
+        "ff-burn-map-gpu-cce31172": 8,
+        "row486-canary-failed-card": 8
+      },
+      "same_final_value_where_present": false
+    },
+    {
+      "chain_block": "2:37",
+      "models": {
+        "cmpglitch-reported-card": 16746,
+        "dstoro-plan-2026-11-17": null,
+        "ff-burn-map-gpu-cce31172": 16746,
+        "row486-canary-failed-card": null
+      },
+      "same_final_value_where_present": true
+    },
+    {
+      "chain_block": "2:38",
+      "models": {
+        "cmpglitch-reported-card": 16746,
+        "dstoro-plan-2026-11-17": null,
+        "ff-burn-map-gpu-cce31172": 16746,
+        "row486-canary-failed-card": null
+      },
+      "same_final_value_where_present": true
+    },
+    {
+      "chain_block": "2:39",
+      "models": {
+        "cmpglitch-reported-card": 1408,
+        "dstoro-plan-2026-11-17": 1408,
+        "ff-burn-map-gpu-cce31172": 1408,
+        "row486-canary-failed-card": null
+      },
+      "same_final_value_where_present": true
+    },
+    {
+      "chain_block": "2:46",
+      "models": {
+        "cmpglitch-reported-card": 32768,
+        "dstoro-plan-2026-11-17": 32768,
+        "ff-burn-map-gpu-cce31172": 40960,
+        "row486-canary-failed-card": null
+      },
+      "same_final_value_where_present": false
+    },
+    {
+      "chain_block": "2:47",
+      "models": {
+        "cmpglitch-reported-card": 0,
+        "dstoro-plan-2026-11-17": 0,
+        "ff-burn-map-gpu-cce31172": 81,
+        "row486-canary-failed-card": 81
+      },
+      "same_final_value_where_present": false
+    },
+    {
+      "chain_block": "2:49",
+      "models": {
+        "cmpglitch-reported-card": 36,
+        "dstoro-plan-2026-11-17": 36,
+        "ff-burn-map-gpu-cce31172": 36,
+        "row486-canary-failed-card": null
+      },
+      "same_final_value_where_present": true
+    }
+  ],
+  "execution_authorized": false,
+  "limitations": [
+    "Record validity does not prove a field coordinate or target is correct.",
+    "Logical old/new values are not physical OTP transitions.",
+    "The source parser does not authenticate the authors or acquisition chain.",
+    "No controller, electrical, prefix-safety, cold-boot or feature proof is inferred."
+  ],
+  "models": [
+    {
+      "errors": [],
+      "executable": false,
+      "logical_final_blocks": {
+        "1:11": 32768,
+        "1:12": 0,
+        "1:14": 0,
+        "1:15": 0,
+        "1:16": 0,
+        "1:19": 16896,
+        "1:20": 6144,
+        "1:23": 8,
+        "1:5": 32775,
+        "1:6": 1537,
+        "1:7": 384,
+        "1:8": 63494,
+        "2:37": 16746,
+        "2:38": 16746,
+        "2:39": 1408,
+        "2:46": 40960,
+        "2:47": 81,
+        "2:49": 36
+      },
+      "logical_initial_blocks": {
+        "1:11": 63488,
+        "1:12": 4095,
+        "1:14": 4088,
+        "1:15": 63496,
+        "1:16": 7169,
+        "1:19": 17040,
+        "1:20": 6534,
+        "1:23": 4079,
+        "1:5": 39015,
+        "1:6": 26113,
+        "1:7": 408,
+        "1:8": 63774,
+        "2:37": 16772,
+        "2:38": 16772,
+        "2:39": 1922,
+        "2:46": 40960,
+        "2:47": 89,
+        "2:49": 228
+      },
+      "model_type": "public-faithful",
+      "name": "ff-burn-map-gpu-cce31172",
+      "record_count": 19,
+      "records": [
+        {
+          "block": 19,
+          "chain": 1,
+          "encoded": 1116734657,
+          "logical_cleared_bits": 0,
+          "logical_new": 17040,
+          "logical_old": 17040,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 1116734657,
+          "row": 293,
+          "source_locator": "line:189"
+        },
+        {
+          "block": 19,
+          "chain": 1,
+          "encoded": 1107297473,
+          "logical_cleared_bits": 144,
+          "logical_new": 16896,
+          "logical_old": 17040,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 1107297473,
+          "row": 294,
+          "source_locator": "line:190"
+        },
+        {
+          "block": 6,
+          "chain": 1,
+          "encoded": 100729217,
+          "logical_cleared_bits": 24576,
+          "logical_new": 1537,
+          "logical_old": 26113,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 100729217,
+          "row": 295,
+          "source_locator": "line:191"
+        },
+        {
+          "block": 7,
+          "chain": 1,
+          "encoded": 25166273,
+          "logical_cleared_bits": 24,
+          "logical_new": 384,
+          "logical_old": 408,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 25166273,
+          "row": 296,
+          "source_locator": "line:192"
+        },
+        {
+          "block": 5,
+          "chain": 1,
+          "encoded": 2147942721,
+          "logical_cleared_bits": 6240,
+          "logical_new": 32775,
+          "logical_old": 39015,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 2147942721,
+          "row": 297,
+          "source_locator": "line:193"
+        },
+        {
+          "block": 20,
+          "chain": 1,
+          "encoded": 402654465,
+          "logical_cleared_bits": 390,
+          "logical_new": 6144,
+          "logical_old": 6534,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 402654465,
+          "row": 298,
+          "source_locator": "line:194"
+        },
+        {
+          "block": 8,
+          "chain": 1,
+          "encoded": 4161143297,
+          "logical_cleared_bits": 280,
+          "logical_new": 63494,
+          "logical_old": 63774,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 4161143297,
+          "row": 299,
+          "source_locator": "line:195"
+        },
+        {
+          "block": 11,
+          "chain": 1,
+          "encoded": 2147484353,
+          "logical_cleared_bits": 30720,
+          "logical_new": 32768,
+          "logical_old": 63488,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 2147484353,
+          "row": 300,
+          "source_locator": "line:196"
+        },
+        {
+          "block": 12,
+          "chain": 1,
+          "encoded": 769,
+          "logical_cleared_bits": 4095,
+          "logical_new": 0,
+          "logical_old": 4095,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 769,
+          "row": 301,
+          "source_locator": "line:197"
+        },
+        {
+          "block": 14,
+          "chain": 1,
+          "encoded": 897,
+          "logical_cleared_bits": 4088,
+          "logical_new": 0,
+          "logical_old": 4088,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 897,
+          "row": 302,
+          "source_locator": "line:198"
+        },
+        {
+          "block": 15,
+          "chain": 1,
+          "encoded": 961,
+          "logical_cleared_bits": 63496,
+          "logical_new": 0,
+          "logical_old": 63496,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 961,
+          "row": 303,
+          "source_locator": "line:199"
+        },
+        {
+          "block": 16,
+          "chain": 1,
+          "encoded": 1025,
+          "logical_cleared_bits": 7169,
+          "logical_new": 0,
+          "logical_old": 7169,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 1025,
+          "row": 304,
+          "source_locator": "line:200"
+        },
+        {
+          "block": 23,
+          "chain": 1,
+          "encoded": 525761,
+          "logical_cleared_bits": 4071,
+          "logical_new": 8,
+          "logical_old": 4079,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 525761,
+          "row": 305,
+          "source_locator": "line:201"
+        },
+        {
+          "block": 39,
+          "chain": 2,
+          "encoded": 92277186,
+          "logical_cleared_bits": 514,
+          "logical_new": 1408,
+          "logical_old": 1922,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 92277186,
+          "row": 306,
+          "source_locator": "line:202"
+        },
+        {
+          "block": 47,
+          "chain": 2,
+          "encoded": 5311426,
+          "logical_cleared_bits": 8,
+          "logical_new": 81,
+          "logical_old": 89,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 5311426,
+          "row": 307,
+          "source_locator": "line:203"
+        },
+        {
+          "block": 49,
+          "chain": 2,
+          "encoded": 2362434,
+          "logical_cleared_bits": 192,
+          "logical_new": 36,
+          "logical_old": 228,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 2362434,
+          "row": 308,
+          "source_locator": "line:204"
+        },
+        {
+          "block": 37,
+          "chain": 2,
+          "encoded": 1097468226,
+          "logical_cleared_bits": 132,
+          "logical_new": 16746,
+          "logical_old": 16772,
+          "logical_set_bits": 106,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 1097468226,
+          "row": 309,
+          "source_locator": "line:205"
+        },
+        {
+          "block": 38,
+          "chain": 2,
+          "encoded": 1097468290,
+          "logical_cleared_bits": 132,
+          "logical_new": 16746,
+          "logical_old": 16772,
+          "logical_set_bits": 106,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 1097468290,
+          "row": 310,
+          "source_locator": "line:206"
+        },
+        {
+          "block": 46,
+          "chain": 2,
+          "encoded": 2684357506,
+          "logical_cleared_bits": 0,
+          "logical_new": 40960,
+          "logical_old": 40960,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 2684357506,
+          "row": 311,
+          "source_locator": "line:207"
+        }
+      ],
+      "repository_commit": null,
+      "row_max": 311,
+      "row_min": 293,
+      "rows_contiguous": true,
+      "source_artifacts": [
+        {
+          "expected_sha256": "3d1a55b1b4e61a0de1553159eb2654990a9eecc2fbfea15f575ccee35afec25f",
+          "hash_verified": true,
+          "path": "FF-BURN-MAP-2026-11-17.md",
+          "role": "primary",
+          "sha256": "3d1a55b1b4e61a0de1553159eb2654990a9eecc2fbfea15f575ccee35afec25f"
+        }
+      ],
+      "source_date": "2026-11-17",
+      "source_kind": "ff-burn-map",
+      "source_path": "FF-BURN-MAP-2026-11-17.md",
+      "source_sha256": "3d1a55b1b4e61a0de1553159eb2654990a9eecc2fbfea15f575ccee35afec25f",
+      "status": "PASS"
+    },
+    {
+      "errors": [],
+      "executable": false,
+      "logical_final_blocks": {
+        "1:11": 0,
+        "1:12": 0,
+        "1:14": 0,
+        "1:15": 0,
+        "1:16": 0,
+        "1:19": 16896,
+        "1:20": 6144,
+        "1:23": 4072,
+        "1:5": 32775,
+        "1:6": 1537,
+        "1:7": 384,
+        "1:8": 63494,
+        "2:37": 16746,
+        "2:38": 16746,
+        "2:39": 1408,
+        "2:46": 32768,
+        "2:47": 0,
+        "2:49": 36
+      },
+      "logical_initial_blocks": {
+        "1:11": 63488,
+        "1:12": 4095,
+        "1:14": 4088,
+        "1:15": 63496,
+        "1:16": 7169,
+        "1:19": 17040,
+        "1:20": 6534,
+        "1:23": 4079,
+        "1:5": 39015,
+        "1:6": 26113,
+        "1:7": 408,
+        "1:8": 63774,
+        "2:37": 16772,
+        "2:38": 16772,
+        "2:39": 1922,
+        "2:46": 40960,
+        "2:47": 89,
+        "2:49": 228
+      },
+      "model_type": "public-faithful",
+      "name": "cmpglitch-reported-card",
+      "record_count": 20,
+      "records": [
+        {
+          "block": 5,
+          "chain": 1,
+          "encoded": 2147942721,
+          "logical_cleared_bits": 6240,
+          "logical_new": 32775,
+          "logical_old": 39015,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 2147942721,
+          "row": 293,
+          "source_locator": "line:106"
+        },
+        {
+          "block": 6,
+          "chain": 1,
+          "encoded": 100729217,
+          "logical_cleared_bits": 24576,
+          "logical_new": 1537,
+          "logical_old": 26113,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 100729217,
+          "row": 294,
+          "source_locator": "line:107"
+        },
+        {
+          "block": 7,
+          "chain": 1,
+          "encoded": 25166273,
+          "logical_cleared_bits": 24,
+          "logical_new": 384,
+          "logical_old": 408,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 25166273,
+          "row": 295,
+          "source_locator": "line:108"
+        },
+        {
+          "block": 8,
+          "chain": 1,
+          "encoded": 4161143297,
+          "logical_cleared_bits": 280,
+          "logical_new": 63494,
+          "logical_old": 63774,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 4161143297,
+          "row": 296,
+          "source_locator": "line:109"
+        },
+        {
+          "block": 11,
+          "chain": 1,
+          "encoded": 705,
+          "logical_cleared_bits": 63488,
+          "logical_new": 0,
+          "logical_old": 63488,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 705,
+          "row": 297,
+          "source_locator": "line:110"
+        },
+        {
+          "block": 12,
+          "chain": 1,
+          "encoded": 769,
+          "logical_cleared_bits": 4095,
+          "logical_new": 0,
+          "logical_old": 4095,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 769,
+          "row": 298,
+          "source_locator": "line:111"
+        },
+        {
+          "block": 14,
+          "chain": 1,
+          "encoded": 897,
+          "logical_cleared_bits": 4088,
+          "logical_new": 0,
+          "logical_old": 4088,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 897,
+          "row": 299,
+          "source_locator": "line:112"
+        },
+        {
+          "block": 15,
+          "chain": 1,
+          "encoded": 4160750529,
+          "logical_cleared_bits": 8,
+          "logical_new": 63488,
+          "logical_old": 63496,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 4160750529,
+          "row": 300,
+          "source_locator": "line:113"
+        },
+        {
+          "block": 19,
+          "chain": 1,
+          "encoded": 1107297473,
+          "logical_cleared_bits": 144,
+          "logical_new": 16896,
+          "logical_old": 17040,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 1107297473,
+          "row": 301,
+          "source_locator": "line:114"
+        },
+        {
+          "block": 15,
+          "chain": 1,
+          "encoded": 961,
+          "logical_cleared_bits": 63488,
+          "logical_new": 0,
+          "logical_old": 63488,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 961,
+          "row": 302,
+          "source_locator": "line:139"
+        },
+        {
+          "block": 16,
+          "chain": 1,
+          "encoded": 1025,
+          "logical_cleared_bits": 7169,
+          "logical_new": 0,
+          "logical_old": 7169,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 1025,
+          "row": 303,
+          "source_locator": "line:140"
+        },
+        {
+          "block": 20,
+          "chain": 1,
+          "encoded": 402654465,
+          "logical_cleared_bits": 390,
+          "logical_new": 6144,
+          "logical_old": 6534,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 402654465,
+          "row": 304,
+          "source_locator": "line:141"
+        },
+        {
+          "block": 39,
+          "chain": 2,
+          "encoded": 92277186,
+          "logical_cleared_bits": 514,
+          "logical_new": 1408,
+          "logical_old": 1922,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 92277186,
+          "row": 305,
+          "source_locator": "line:160"
+        },
+        {
+          "block": 47,
+          "chain": 2,
+          "encoded": 5311426,
+          "logical_cleared_bits": 8,
+          "logical_new": 81,
+          "logical_old": 89,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 5311426,
+          "row": 306,
+          "source_locator": "line:161"
+        },
+        {
+          "block": 49,
+          "chain": 2,
+          "encoded": 2362434,
+          "logical_cleared_bits": 192,
+          "logical_new": 36,
+          "logical_old": 228,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 2362434,
+          "row": 307,
+          "source_locator": "line:162"
+        },
+        {
+          "block": 23,
+          "chain": 1,
+          "encoded": 266864065,
+          "logical_cleared_bits": 7,
+          "logical_new": 4072,
+          "logical_old": 4079,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 266864065,
+          "row": 308,
+          "source_locator": "line:174"
+        },
+        {
+          "block": 47,
+          "chain": 2,
+          "encoded": 3010,
+          "logical_cleared_bits": 81,
+          "logical_new": 0,
+          "logical_old": 81,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 3010,
+          "row": 309,
+          "source_locator": "line:198"
+        },
+        {
+          "block": 46,
+          "chain": 2,
+          "encoded": 2147486594,
+          "logical_cleared_bits": 8192,
+          "logical_new": 32768,
+          "logical_old": 40960,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 2147486594,
+          "row": 310,
+          "source_locator": "line:199"
+        },
+        {
+          "block": 37,
+          "chain": 2,
+          "encoded": 1097468226,
+          "logical_cleared_bits": 132,
+          "logical_new": 16746,
+          "logical_old": 16772,
+          "logical_set_bits": 106,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 1097468226,
+          "row": 311,
+          "source_locator": "line:215"
+        },
+        {
+          "block": 38,
+          "chain": 2,
+          "encoded": 1097468290,
+          "logical_cleared_bits": 132,
+          "logical_new": 16746,
+          "logical_old": 16772,
+          "logical_set_bits": 106,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 1097468290,
+          "row": 312,
+          "source_locator": "line:216"
+        }
+      ],
+      "repository_commit": "feb61e250b357cae5acd424a6685b2f27c1e806a",
+      "row_max": 312,
+      "row_min": 293,
+      "rows_contiguous": true,
+      "source_artifacts": [
+        {
+          "expected_sha256": "46431a51e57994f1b61edc779071a879c908ab141268e6590f96a29751d65841",
+          "hash_verified": true,
+          "path": "research-sources/EthanZhangCN-cmp170hx-final-crack/CMPGlitch/cmp_burn.md",
+          "role": "primary",
+          "sha256": "46431a51e57994f1b61edc779071a879c908ab141268e6590f96a29751d65841"
+        }
+      ],
+      "source_date": "2026-11-21",
+      "source_kind": "cmp-burn-markdown",
+      "source_path": "research-sources/EthanZhangCN-cmp170hx-final-crack/CMPGlitch/cmp_burn.md",
+      "source_sha256": "46431a51e57994f1b61edc779071a879c908ab141268e6590f96a29751d65841",
+      "status": "PASS"
+    },
+    {
+      "errors": [],
+      "executable": false,
+      "logical_final_blocks": {
+        "1:11": 0,
+        "1:12": 2040,
+        "1:14": 0,
+        "1:15": 49152,
+        "1:16": 1,
+        "1:19": 16896,
+        "1:20": 6144,
+        "1:23": 4072,
+        "1:5": 32775,
+        "1:6": 1537,
+        "1:7": 384,
+        "1:8": 63510,
+        "2:39": 1408,
+        "2:46": 32768,
+        "2:47": 0,
+        "2:49": 36
+      },
+      "logical_initial_blocks": {
+        "1:11": 63488,
+        "1:12": 4095,
+        "1:14": 4088,
+        "1:15": 63496,
+        "1:16": 7169,
+        "1:19": 17040,
+        "1:20": 6534,
+        "1:23": 4079,
+        "1:5": 39015,
+        "1:6": 26113,
+        "1:7": 408,
+        "1:8": 63774,
+        "2:39": 1922,
+        "2:46": 40960,
+        "2:47": 89,
+        "2:49": 228
+      },
+      "model_type": "public-faithful",
+      "name": "dstoro-plan-2026-11-17",
+      "record_count": 16,
+      "records": [
+        {
+          "block": 5,
+          "chain": 1,
+          "encoded": 2147942721,
+          "logical_cleared_bits": 6240,
+          "logical_new": 32775,
+          "logical_old": 39015,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 2147942721,
+          "row": 294,
+          "source_locator": "/records/0"
+        },
+        {
+          "block": 6,
+          "chain": 1,
+          "encoded": 100729217,
+          "logical_cleared_bits": 24576,
+          "logical_new": 1537,
+          "logical_old": 26113,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 100729217,
+          "row": 295,
+          "source_locator": "/records/1"
+        },
+        {
+          "block": 7,
+          "chain": 1,
+          "encoded": 25166273,
+          "logical_cleared_bits": 24,
+          "logical_new": 384,
+          "logical_old": 408,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 25166273,
+          "row": 296,
+          "source_locator": "/records/2"
+        },
+        {
+          "block": 8,
+          "chain": 1,
+          "encoded": 4162191873,
+          "logical_cleared_bits": 264,
+          "logical_new": 63510,
+          "logical_old": 63774,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 4162191873,
+          "row": 297,
+          "source_locator": "/records/3"
+        },
+        {
+          "block": 11,
+          "chain": 1,
+          "encoded": 705,
+          "logical_cleared_bits": 63488,
+          "logical_new": 0,
+          "logical_old": 63488,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 705,
+          "row": 298,
+          "source_locator": "/records/4"
+        },
+        {
+          "block": 12,
+          "chain": 1,
+          "encoded": 133694209,
+          "logical_cleared_bits": 2055,
+          "logical_new": 2040,
+          "logical_old": 4095,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 133694209,
+          "row": 299,
+          "source_locator": "/records/5"
+        },
+        {
+          "block": 14,
+          "chain": 1,
+          "encoded": 897,
+          "logical_cleared_bits": 4088,
+          "logical_new": 0,
+          "logical_old": 4088,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 897,
+          "row": 300,
+          "source_locator": "/records/6"
+        },
+        {
+          "block": 15,
+          "chain": 1,
+          "encoded": 3221226433,
+          "logical_cleared_bits": 14344,
+          "logical_new": 49152,
+          "logical_old": 63496,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 3221226433,
+          "row": 301,
+          "source_locator": "/records/7"
+        },
+        {
+          "block": 16,
+          "chain": 1,
+          "encoded": 66561,
+          "logical_cleared_bits": 7168,
+          "logical_new": 1,
+          "logical_old": 7169,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 66561,
+          "row": 302,
+          "source_locator": "/records/8"
+        },
+        {
+          "block": 19,
+          "chain": 1,
+          "encoded": 1107297473,
+          "logical_cleared_bits": 144,
+          "logical_new": 16896,
+          "logical_old": 17040,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 1107297473,
+          "row": 303,
+          "source_locator": "/records/9"
+        },
+        {
+          "block": 20,
+          "chain": 1,
+          "encoded": 402654465,
+          "logical_cleared_bits": 390,
+          "logical_new": 6144,
+          "logical_old": 6534,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 402654465,
+          "row": 304,
+          "source_locator": "/records/10"
+        },
+        {
+          "block": 23,
+          "chain": 1,
+          "encoded": 266864065,
+          "logical_cleared_bits": 7,
+          "logical_new": 4072,
+          "logical_old": 4079,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 266864065,
+          "row": 305,
+          "source_locator": "/records/11"
+        },
+        {
+          "block": 39,
+          "chain": 2,
+          "encoded": 92277186,
+          "logical_cleared_bits": 514,
+          "logical_new": 1408,
+          "logical_old": 1922,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 92277186,
+          "row": 306,
+          "source_locator": "/records/12"
+        },
+        {
+          "block": 46,
+          "chain": 2,
+          "encoded": 2147486594,
+          "logical_cleared_bits": 8192,
+          "logical_new": 32768,
+          "logical_old": 40960,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 2147486594,
+          "row": 307,
+          "source_locator": "/records/13"
+        },
+        {
+          "block": 47,
+          "chain": 2,
+          "encoded": 3010,
+          "logical_cleared_bits": 89,
+          "logical_new": 0,
+          "logical_old": 89,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 3010,
+          "row": 308,
+          "source_locator": "/records/14"
+        },
+        {
+          "block": 49,
+          "chain": 2,
+          "encoded": 2362434,
+          "logical_cleared_bits": 192,
+          "logical_new": 36,
+          "logical_old": 228,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 2362434,
+          "row": 309,
+          "source_locator": "/records/15"
+        }
+      ],
+      "repository_commit": null,
+      "row_max": 309,
+      "row_min": 294,
+      "rows_contiguous": true,
+      "source_artifacts": [
+        {
+          "expected_sha256": "49e43976220319853f7c30a2829e01bd937aa3ed33c0c22bf6d3f5c3438642f2",
+          "hash_verified": true,
+          "path": "research-sources/dstoro-2026-11-17-fuse-dumps/plan.json",
+          "role": "primary",
+          "sha256": "49e43976220319853f7c30a2829e01bd937aa3ed33c0c22bf6d3f5c3438642f2"
+        }
+      ],
+      "source_date": "2026-11-17",
+      "source_kind": "dstoro-plan-json",
+      "source_path": "research-sources/dstoro-2026-11-17-fuse-dumps/plan.json",
+      "source_sha256": "49e43976220319853f7c30a2829e01bd937aa3ed33c0c22bf6d3f5c3438642f2",
+      "status": "PASS"
+    },
+    {
+      "errors": [],
+      "executable": false,
+      "logical_final_blocks": {
+        "1:11": 0,
+        "1:12": 8192,
+        "1:13": 64,
+        "1:14": 0,
+        "1:15": 0,
+        "1:16": 0,
+        "1:19": 16896,
+        "1:20": 6144,
+        "1:23": 8,
+        "1:5": 39015,
+        "1:6": 1537,
+        "1:7": 384,
+        "1:8": 63494,
+        "2:47": 81
+      },
+      "logical_initial_blocks": {
+        "1:11": 63488,
+        "1:12": 63503,
+        "1:13": 4095,
+        "1:14": 2048,
+        "1:15": 14336,
+        "1:16": 126,
+        "1:19": 17040,
+        "1:20": 6534,
+        "1:23": 4079,
+        "1:5": 39015,
+        "1:6": 26113,
+        "1:7": 408,
+        "1:8": 63598,
+        "2:47": 89
+      },
+      "model_type": "public-faithful",
+      "name": "row486-canary-failed-card",
+      "record_count": 15,
+      "records": [
+        {
+          "block": 5,
+          "chain": 1,
+          "encoded": 2147942721,
+          "logical_cleared_bits": 6240,
+          "logical_new": 32775,
+          "logical_old": 39015,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 2147942721,
+          "row": 297,
+          "source_locator": "/ff_rows/297"
+        },
+        {
+          "block": 6,
+          "chain": 1,
+          "encoded": 100729217,
+          "logical_cleared_bits": 24576,
+          "logical_new": 1537,
+          "logical_old": 26113,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 100729217,
+          "row": 298,
+          "source_locator": "/ff_rows/298"
+        },
+        {
+          "block": 7,
+          "chain": 1,
+          "encoded": 25166273,
+          "logical_cleared_bits": 24,
+          "logical_new": 384,
+          "logical_old": 408,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 25166273,
+          "row": 299,
+          "source_locator": "/ff_rows/299"
+        },
+        {
+          "block": 8,
+          "chain": 1,
+          "encoded": 4161143297,
+          "logical_cleared_bits": 104,
+          "logical_new": 63494,
+          "logical_old": 63598,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 4161143297,
+          "row": 300,
+          "source_locator": "/ff_rows/300"
+        },
+        {
+          "block": 11,
+          "chain": 1,
+          "encoded": 705,
+          "logical_cleared_bits": 63488,
+          "logical_new": 0,
+          "logical_old": 63488,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 705,
+          "row": 301,
+          "source_locator": "/ff_rows/301"
+        },
+        {
+          "block": 12,
+          "chain": 1,
+          "encoded": 536871681,
+          "logical_cleared_bits": 55311,
+          "logical_new": 8192,
+          "logical_old": 63503,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 536871681,
+          "row": 302,
+          "source_locator": "/ff_rows/302"
+        },
+        {
+          "block": 13,
+          "chain": 1,
+          "encoded": 4195137,
+          "logical_cleared_bits": 4031,
+          "logical_new": 64,
+          "logical_old": 4095,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 4195137,
+          "row": 303,
+          "source_locator": "/ff_rows/303"
+        },
+        {
+          "block": 14,
+          "chain": 1,
+          "encoded": 897,
+          "logical_cleared_bits": 2048,
+          "logical_new": 0,
+          "logical_old": 2048,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 897,
+          "row": 304,
+          "source_locator": "/ff_rows/304"
+        },
+        {
+          "block": 15,
+          "chain": 1,
+          "encoded": 961,
+          "logical_cleared_bits": 14336,
+          "logical_new": 0,
+          "logical_old": 14336,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 961,
+          "row": 305,
+          "source_locator": "/ff_rows/305"
+        },
+        {
+          "block": 16,
+          "chain": 1,
+          "encoded": 1025,
+          "logical_cleared_bits": 126,
+          "logical_new": 0,
+          "logical_old": 126,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 1025,
+          "row": 306,
+          "source_locator": "/ff_rows/306"
+        },
+        {
+          "block": 19,
+          "chain": 1,
+          "encoded": 1107297473,
+          "logical_cleared_bits": 144,
+          "logical_new": 16896,
+          "logical_old": 17040,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 1107297473,
+          "row": 307,
+          "source_locator": "/ff_rows/307"
+        },
+        {
+          "block": 20,
+          "chain": 1,
+          "encoded": 402654465,
+          "logical_cleared_bits": 390,
+          "logical_new": 6144,
+          "logical_old": 6534,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 402654465,
+          "row": 308,
+          "source_locator": "/ff_rows/308"
+        },
+        {
+          "block": 23,
+          "chain": 1,
+          "encoded": 525761,
+          "logical_cleared_bits": 4071,
+          "logical_new": 8,
+          "logical_old": 4079,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 525761,
+          "row": 309,
+          "source_locator": "/ff_rows/309"
+        },
+        {
+          "block": 47,
+          "chain": 2,
+          "encoded": 5311426,
+          "logical_cleared_bits": 8,
+          "logical_new": 81,
+          "logical_old": 89,
+          "logical_set_bits": 0,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 5311426,
+          "row": 310,
+          "source_locator": "/ff_rows/310"
+        },
+        {
+          "block": 5,
+          "chain": 1,
+          "encoded": 2556887361,
+          "logical_cleared_bits": 0,
+          "logical_new": 39015,
+          "logical_old": 32775,
+          "logical_set_bits": 6240,
+          "physical_expected_old_word": 0,
+          "physical_programmed_bits": 2556887361,
+          "row": 486,
+          "source_locator": "/ff_rows/486"
+        }
+      ],
+      "repository_commit": null,
+      "row_max": 486,
+      "row_min": 297,
+      "rows_contiguous": false,
+      "source_artifacts": [
+        {
+          "expected_sha256": "b5296a7fd32852372e5f48464b92bca965b0b6c254b990de9f8cef72385deaf8",
+          "hash_verified": true,
+          "path": "discord-export/1520424135245693040/1571932068181577919/media/fuse_dump-44a5eaef05600228.json",
+          "role": "primary",
+          "sha256": "b5296a7fd32852372e5f48464b92bca965b0b6c254b990de9f8cef72385deaf8"
+        },
+        {
+          "expected_sha256": "842c3a675cf52c1ad6f38931ea7acffc1d522c4343c2215fb0feeb8624eb833b",
+          "hash_verified": true,
+          "path": "discord-export/1520424135245693040/1571932068181577919/media/Details_486_burn-eee594d7315867f4.md",
+          "role": "supporting-claim",
+          "sha256": "842c3a675cf52c1ad6f38931ea7acffc1d522c4343c2215fb0feeb8624eb833b"
+        }
+      ],
+      "source_date": "2026-11-20T14:35:25.661Z",
+      "source_kind": "postburn-ffcalc-json",
+      "source_path": "discord-export/1520424135245693040/1571932068181577919/media/fuse_dump-44a5eaef05600228.json",
+      "source_sha256": "b5296a7fd32852372e5f48464b92bca965b0b6c254b990de9f8cef72385deaf8",
+      "status": "PASS"
+    }
+  ],
+  "schema": "170hx-ray-public-plan-audit-v1",
+  "scope": "offline source normalization and record-level consistency only",
+  "source_inventory": [
+    {
+      "artifacts": [
+        {
+          "expected_sha256": "3d1a55b1b4e61a0de1553159eb2654990a9eecc2fbfea15f575ccee35afec25f",
+          "hash_verified": true,
+          "path": "FF-BURN-MAP-2026-11-17.md",
+          "role": "primary",
+          "sha256": "3d1a55b1b4e61a0de1553159eb2654990a9eecc2fbfea15f575ccee35afec25f"
+        }
+      ],
+      "date": "2026-11-17",
+      "name": "ff-burn-map-gpu-cce31172",
+      "path": "FF-BURN-MAP-2026-11-17.md",
+      "sha256": "3d1a55b1b4e61a0de1553159eb2654990a9eecc2fbfea15f575ccee35afec25f"
+    },
+    {
+      "artifacts": [
+        {
+          "expected_sha256": "46431a51e57994f1b61edc779071a879c908ab141268e6590f96a29751d65841",
+          "hash_verified": true,
+          "path": "research-sources/EthanZhangCN-cmp170hx-final-crack/CMPGlitch/cmp_burn.md",
+          "role": "primary",
+          "sha256": "46431a51e57994f1b61edc779071a879c908ab141268e6590f96a29751d65841"
+        }
+      ],
+      "date": "2026-11-21",
+      "name": "cmpglitch-reported-card",
+      "path": "research-sources/EthanZhangCN-cmp170hx-final-crack/CMPGlitch/cmp_burn.md",
+      "sha256": "46431a51e57994f1b61edc779071a879c908ab141268e6590f96a29751d65841"
+    },
+    {
+      "artifacts": [
+        {
+          "expected_sha256": "49e43976220319853f7c30a2829e01bd937aa3ed33c0c22bf6d3f5c3438642f2",
+          "hash_verified": true,
+          "path": "research-sources/dstoro-2026-11-17-fuse-dumps/plan.json",
+          "role": "primary",
+          "sha256": "49e43976220319853f7c30a2829e01bd937aa3ed33c0c22bf6d3f5c3438642f2"
+        }
+      ],
+      "date": "2026-11-17",
+      "name": "dstoro-plan-2026-11-17",
+      "path": "research-sources/dstoro-2026-11-17-fuse-dumps/plan.json",
+      "sha256": "49e43976220319853f7c30a2829e01bd937aa3ed33c0c22bf6d3f5c3438642f2"
+    },
+    {
+      "artifacts": [
+        {
+          "expected_sha256": "b5296a7fd32852372e5f48464b92bca965b0b6c254b990de9f8cef72385deaf8",
+          "hash_verified": true,
+          "path": "discord-export/1520424135245693040/1571932068181577919/media/fuse_dump-44a5eaef05600228.json",
+          "role": "primary",
+          "sha256": "b5296a7fd32852372e5f48464b92bca965b0b6c254b990de9f8cef72385deaf8"
+        },
+        {
+          "expected_sha256": "842c3a675cf52c1ad6f38931ea7acffc1d522c4343c2215fb0feeb8624eb833b",
+          "hash_verified": true,
+          "path": "discord-export/1520424135245693040/1571932068181577919/media/Details_486_burn-eee594d7315867f4.md",
+          "role": "supporting-claim",
+          "sha256": "842c3a675cf52c1ad6f38931ea7acffc1d522c4343c2215fb0feeb8624eb833b"
+        }
+      ],
+      "date": "2026-11-20T14:35:25.661Z",
+      "name": "row486-canary-failed-card",
+      "path": "discord-export/1520424135245693040/1571932068181577919/media/fuse_dump-44a5eaef05600228.json",
+      "sha256": "b5296a7fd32852372e5f48464b92bca965b0b6c254b990de9f8cef72385deaf8"
+    }
+  ],
+  "tool": {
+    "name": "170hx_plan_source_audit.py",
+    "sha256": "4c3a9c0cdebc2412e63d58ea8ed2453cdb84230c8796e71546eb648d8d1ca4b1",
+    "version": "0.3.0"
+  }
+}

@@ -23,9 +23,9 @@ For an existing clone:
 git -C /path/to/170HX-RAY submodule update --init --recursive
 ```
 
-Both repositories are currently private, so the GitHub credential used for a
-recursive clone must be authorized for `anoane/170HX-RAY` and
-`anoane/archbench`.
+Both repositories are public. A recursive clone requires no GitHub credential;
+the parent repository still verifies the ArchBench URL, commit and tree against
+its checked-in lock.
 
 170HX-XRAY is an evidence-oriented GA100/CMP 170HX observer, physical-row
 collector, FF/IFF/RIR decoder, and fail-closed planning tool. It is intended to
@@ -65,6 +65,12 @@ The [release-validation ledger](./docs/RELEASE_VALIDATION_2026-11-26.md)
 records its bounded historical result without republishing the private capture.
 Generate a new specimen-local report with `full-report` or
 `full-report-bench`; generated `reports/` content is ignored by Git.
+
+The public package includes a first-party public-plan audit and a hash-only
+source-lineage descriptor under `evidence/public/`. It does not redistribute or
+relicense the referenced raw third-party plan files. Candidate output marks
+those bindings `hash_attestation_only: true` and `hash_verified: false` when the
+raw bytes are absent.
 
 Historical links below intentionally retain their original `170hx-ray-*`
 filenames. Those names identify immutable pre-XRAY evidence and are not current
@@ -825,13 +831,17 @@ historical 4.2 32-manifest result. `specimen-nvlink-global` remains available
 for offline candidate review only: Chain-1 bits 368--370 are global IOCTRL
 group disables, not the twelve-link physical map, so the compiler and backend
 reject it. See [`UNLOCK_PLAN.md`](UNLOCK_PLAN.md) for the code-locked admission
-and evidence contract.
+and evidence contract. The seven current-baseline manifests for one card are
+siblings, not seven ordered operations: applying any one makes the other six
+stale.
 
 `xray-common-permanent-topology` is the preferred common foundation for either
 dual-path end state: it seals FBIO/FBPA/shared ROP-L2, then TPC0..7/PES, then
 activates FBP, then activates GPC, and stops for cold validation before any PCIe,
-NVLink, identity or VBIOS change. The separate memory and compute profiles remain
-available for isolated research and regression comparisons.
+identity or VBIOS change. PCIe requires a new exact-current rebase; NVLink is
+excluded from both routes and remains rejected/research-only. The separate
+memory and compute profiles remain available for isolated research and
+regression comparisons.
 
 ### 1. Generate an exact-current candidate
 
@@ -1522,13 +1532,171 @@ ArchBench, transient 150-W-by-default power control, and sampled power
 envelopes. It does not replace or weaken the planning path: both frontends run
 the same three-layer, non-authorizing planning and row-export workflow.
 
-The report contract is deliberately explicit:
+The report contract is deliberately explicit. Its planning products are related
+by evidence provenance, not by an implied execution order:
 
 | Layer | Requested output | Completion proof |
 |---|---|---|
 | 1. Goal/checklist | All four models (`evidence-only`, `public-model`, `cross-checked-theory`, `compare`), each in JSON, JSONL, text, and canonical-JSON binary, with inert apply dry-run and OTP-readiness records | Every requested artifact is present in, and hash-bound by, the verified full-dump index |
-| 2. Exact-current candidate | All 18 profiles per card; the complete candidate in JSON, JSONL, text, and canonical-JSON binary; every proposed 512-row MAIN image in JSON, JSONL, indexed text, and raw u32le | Every transport is independently decoded and compared; every row image replays to the candidate's bound digest |
-| 3. Sealed manifest | All seven admitted v2 profiles per card | Each manifest is compiled and independently verified; no review receipt is created and execution remains unauthorized |
+| 2. Exact-current option matrix | All 18 independent profiles per card; the complete candidate in JSON, JSONL, text, and canonical-JSON binary; every proposed 512-row MAIN image in JSON, JSONL, indexed text, and raw u32le | Every transport is independently decoded and compared; every row image replays to the candidate's bound digest |
+| 3. Current-baseline sibling manifests | All seven admitted v2 profiles per card, retained as mutually exclusive review artifacts | Each manifest is compiled and independently verified; no review receipt is created and execution remains unauthorized. They are not an ordered or cumulative burn sequence. |
+
+### Route-aware report layout
+
+Every successful planning run separates observed evidence, independent options,
+two final-state routes, and non-route overlays. `full-report` and
+`full-report-bench` produce the same planning tree; the latter only adds the
+benchmark campaign.
+
+```text
+<report>/
+|-- read-dump-plan-bundle/                 # compatibility evidence/export view
+|-- candidate-plan-exports/                # compatibility candidate view
+|   `-- candidate-plan.{json,jsonl,txt,canonical-json.bin}
+|-- candidate-proposed-images/<BDF>/<PROFILE>/  # compatibility row view
+|   `-- proposed-main.{json,jsonl,indexed.txt,raw-u32le.bin}
+|-- shared/
+|   |-- index.json
+|   |-- evidence/index.json
+|   |-- layer-1-checklists/index.json
+|   `-- baselines/<BDF>/
+|       |-- baseline-binding.json
+|       |-- main.u32le.bin
+|       `-- rir.u32le.bin
+|-- option-matrix/
+|   |-- option-matrix.json
+|   |-- SHA256SUMS
+|   |-- candidate-plan.{json,jsonl,txt,canonical-json.bin}
+|   |-- cards/<BDF>/profiles/<PROFILE>/    # 18 independent outcomes
+|   |   |-- profile-binding.json
+|   |   `-- proposed-main.{json,jsonl,indexed.txt,raw-u32le.bin}
+|   `-- current-baseline-sibling-manifests/<BDF>/
+|       |-- README-NOT-CUMULATIVE.md
+|       `-- <PROFILE>.json                 # exactly 7 sibling manifests
+|-- routes/
+|   |-- route-index.{json,jsonl,txt,canonical-json.bin}
+|   |-- retain-cmp-20c2/
+|   |   |-- route.{json,jsonl,txt,canonical-json.bin}
+|   |   `-- cards/<BDF>/
+|   |       |-- route-status.json
+|   |       |-- epochs/000-baseline/evidence-binding.json
+|   |       `-- segments/{010-common-topology,020-isolated-pcie,
+|   |                     030-retain-identity,040-software-continuation}/
+|   |-- convert-a100-20b5/
+|   |   |-- route.{json,jsonl,txt,canonical-json.bin}
+|   |   `-- cards/<BDF>/
+|   |       |-- route-status.json
+|   |       |-- epochs/000-baseline/evidence-binding.json
+|   |       `-- segments/{010-common-topology,020-isolated-pcie,
+|   |                     030-identity-20b5-last,040-signed-a100-vbios,
+|   |                     050-software-sm-continuation}/
+|   `-- comparison/route-comparison.json
+`-- overlays/
+    |-- index.json
+    |-- media-mig-experimental/overlay.json
+    |-- sys-pipe-experimental/overlay.json
+    `-- nvlink-rejected/overlay.json
+```
+
+This derived tree is emitted only when candidate generation and the complete
+verified sibling-manifest matrix succeed. Otherwise the report records
+`route-aware-output-layout` as `skipped` or `failed` and does not fabricate a
+partial route tree.
+
+In directory names, `<BDF>` is the filesystem-safe full BDF (for example,
+`0000-01-00-0` for `0000:01:00.0`). The JSON documents retain the canonical
+colon/dot form. Every segment directory contains `segment-status.json`; the
+current `010-common-topology` directory also contains
+`next-required-capture.json` and references the option matrix's authoritative
+manifest.
+
+The 18 option profiles are a matrix of **independent, non-additive** answers to
+“what would this one policy propose from this exact baseline?” They are not 18
+steps. In particular, HBM-only and SM-only are alternatives/subsets of the
+common-topology profile, and SYS_PIPE-only overlaps the media/MIG experimental
+profile. Likewise, the seven files in each
+`current-baseline-sibling-manifests/<BDF>/` directory all start from the same
+`000-baseline`. Executing any one of them changes the card and makes every
+sibling stale; row images or operations from siblings must never be
+concatenated. The nested `SHA256SUMS` binds exactly those `7 x card-count`
+siblings; the outer report manifest also binds that checksum and every route
+artifact.
+
+The route tree is a sequencing contract, not execution authorization. On the
+current exact baseline, only `segments/010-common-topology/` can reference a
+compiled next manifest. The authoritative manifest is stored once in the option
+matrix's sibling area rather than duplicated into each route. Later segments
+contain explicit withheld markers until a cold cycle, a new complete capture,
+and an exact-current rebase create the next epoch:
+
+```text
+000-baseline --010 common topology--> 001-post-topology
+001-post-topology --020 isolated PCIe--> 002-post-pcie
+002-post-pcie --030 A100 identity last--> terminal 20b5  (A100 route only)
+```
+
+Those epoch-001/002 arrows are a sequencing forecast, not implemented planner
+transitions. Full-report 0.7 packages only the initial `000-baseline` state; it
+does not promote a changed-card capture or compile PCIe/identity as the new
+current segment. Preserve the initial report after any card change and use
+separately reviewed tooling that explicitly supports the observed later epoch.
+
+The names describe required evidence epochs; a report generated from
+`000-baseline` does not predict the actual post-write rows and cannot precompile
+the later manifests. The route's `final_device_id` is only a terminal forecast,
+not an executable row image. The observed terminal state exists only after cold
+validation and a new capture.
+
+Each card's `route-status.json` states its current epoch, next segment, expected
+identity, and references every segment status. Those records bind the sole
+current manifest or give the withheld/external reason, and always record
+`execution_authorized: false`. Missing or ineligible evidence yields an explicit
+`skipped` or `failed` component status rather than a route silently built from
+historical data.
+Segment records distinguish `compiled-current-baseline-review-only`,
+`historical-review-only-requires-exact-current-recapture`,
+`withheld-requires-cold-recapture-and-rebase`, the no-OTP CMP
+`withheld-post-cold-device-20c2-checkpoint`, and
+`withheld-external-action`. See [USAGE.md](./USAGE.md) for their operational
+meanings.
+
+The two route models differ only where the final platform policy requires it:
+
+- `retain-cmp-20c2` exposes `010-common-topology`, withheld
+  `020-isolated-pcie`, the expectation-only `030-retain-identity`, and external
+  `040-software-continuation`. It keeps CMP identity and never contains an
+  identity OTP manifest.
+- `convert-a100-20b5` exposes `010-common-topology`, withheld
+  `020-isolated-pcie`, withheld `030-identity-20b5-last`, external
+  `040-signed-a100-vbios`, and external `050-software-sm-continuation`.
+  Identity is the final OTP segment because the qualified append backend
+  requires a live `20c2`. A matching signed A100 VBIOS migration and any
+  required software SM continuation are external actions with validation
+  contracts, not fuse manifests.
+
+NVLink and media are deliberately absent from both base routes. Global NVLink
+disable bits do not constitute a physical per-link enable plan, so NVLink is a
+rejected/research-only overlay. The defect-gated media/MIG and SYS_PIPE options
+are experimental overlays. Selecting or reviewing an overlay never makes it an
+implicit step in either terminal route.
+
+No additional route switch is required: the full-report commands below emit
+both routes and their shared route index. Inspect the machine-readable index
+and every per-card status before considering any separately authorized
+workflow:
+
+```sh
+XRAY_REPORT=/absolute/new/report-directory
+python3 -m json.tool "$XRAY_REPORT/routes/route-index.json"
+find "$XRAY_REPORT/routes" -name route-status.json -print \
+  -exec python3 -m json.tool '{}' \;
+find "$XRAY_REPORT/option-matrix/current-baseline-sibling-manifests" \
+  -name '*.json' -print
+```
+
+The JSONL, text, and canonical-JSON binary route transports are replay-checked
+equivalents, not additional plans. The whole report remains bound by its
+top-level index and `SHA256SUMS`.
 
 The same full-dump also requests four observation transports, all nine covered
 MAIN row formats, all four RIR formats, and all four register formats. The nine
@@ -1543,8 +1711,10 @@ relabeling its access state.
 This is evidence-gated. With no verified complete 512-row MAIN prerequisite, a
 dependent layer is recorded as `skipped`; with eligible MAIN input but a missing or
 inconsistent required output, it is `failed`. A verified live semantic capture
-can be promoted into the exact-current candidate layer; reviewed matching
-`--physical-capture` inputs remain available for imports. Neither mode invents
+in the same report invocation can be promoted into the exact-current candidate
+layer. `--no-live-capture` imports are always historical review-only, even when
+their timestamps are recent, because age does not prove that no intervening
+device-state change occurred. Neither mode invents
 rows, RIR, registers, defects, or a candidate. The compatible public-shaped
 serializers use the empirical retained-population interval `S=222`, `E=511`.
 That interval is explicitly **not** an official GA100 physical descriptor or
@@ -1579,7 +1749,8 @@ The report retains full `nvidia-smi`, `-q`, XML, topology, NVLink and MIG
 output; CPU, DIMM, motherboard, BIOS, kernel, driver/module, CUDA/library, PCIe
 and NVMe evidence; every covered dump format; specimen-specific 64/80/96-GiB
 and up-to-128-SM defect ceilings; both CMP-retained and A100-identity/VBIOS route
-models; the 18-profile candidate and seven-profile manifest matrix; and
+models; the 18-profile independent option matrix and seven current-baseline
+sibling manifests; and
 explicit feature boundaries for ECC, MIG, NVENC, NVDEC, NVJPEG and OFA.
 
 Every executed benchmark scope must prove the exact requested and enforced limit
