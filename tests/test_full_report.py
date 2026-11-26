@@ -926,6 +926,49 @@ class FullReportTests(unittest.TestCase):
             self.assertTrue(
                 ordinary["candidate_input_promotion"]["promoted"]
             )
+            self.assertEqual(
+                args.candidate_input_provenance,
+                TOOL.CANDIDATE_PROVENANCE_LIVE,
+            )
+            self.assertTrue(
+                ordinary["candidate_input_promotion"]["exact_current"]
+            )
+
+    def test_candidate_currentness_requires_same_invocation_live_provenance(self):
+        args = self.arguments(Path("unused"))
+        args.no_live_capture = False
+        args.physical_capture = ["external.json"]
+        explicit = TOOL.classify_candidate_input(args, 0.01)
+        self.assertEqual(
+            explicit["provenance"], TOOL.CANDIDATE_PROVENANCE_EXPLICIT,
+        )
+        self.assertFalse(explicit["exact_current"])
+        self.assertEqual(
+            explicit["reason_code"], "not-same-invocation-live-capture",
+        )
+
+        args.candidate_input_provenance = TOOL.CANDIDATE_PROVENANCE_IMPORTED
+        imported = TOOL.classify_candidate_input(args, 0.01)
+        self.assertFalse(imported["exact_current"])
+
+        args.candidate_input_provenance = TOOL.CANDIDATE_PROVENANCE_LIVE
+        live = TOOL.classify_candidate_input(args, 0.01)
+        self.assertTrue(live["exact_current"])
+        self.assertFalse(live["historical_review_only"])
+
+        args.no_live_capture = True
+        contradictory = TOOL.classify_candidate_input(args, 0.01)
+        self.assertFalse(contradictory["exact_current"])
+        self.assertEqual(
+            contradictory["reason_code"],
+            "live-provenance-inconsistent-with-offline-mode",
+        )
+
+    def test_candidate_cli_help_never_promotes_external_age_to_current(self):
+        help_text = " ".join(TOOL.build_parser().format_help().split())
+        self.assertIn("always historical/review-only", help_text)
+        self.assertIn("age never makes an external/imported file", help_text)
+        self.assertIn("same-invocation verified live", help_text)
 
     def test_candidate_layer_requests_and_decodes_all_lossless_formats(self):
         document = {
@@ -1647,7 +1690,7 @@ class FullReportTests(unittest.TestCase):
         with self.assertRaisesRegex(TOOL.ReportError, "dual-route"):
             TOOL.candidate_target_summary(malformed, ["0000:01:00.0"])
 
-    def test_verified_full_dump_import_is_relocated_and_supplies_candidate(self):
+    def test_verified_full_dump_import_requires_explicit_historical_opt_in(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "source"
@@ -1688,7 +1731,12 @@ class FullReportTests(unittest.TestCase):
                 ledger[0]["levels_completed"],
                 ["passive", "bar-read", "semantic-read"],
             )
-            self.assertTrue(Path(args.physical_capture[0]).is_file())
+            self.assertEqual(args.physical_capture, [])
+            self.assertEqual(
+                ledger[0]["candidate_input_status"],
+                "historical-not-promoted",
+            )
+            self.assertFalse(ledger[0]["candidate_input_exact_current"])
             self.assertTrue((output / "read-dump-plan-bundle" / "index.json").is_file())
             coverage = next(
                 value for value in ledger
@@ -1696,6 +1744,32 @@ class FullReportTests(unittest.TestCase):
             )
             self.assertEqual(coverage["status"], "skipped")
             self.assertFalse(ledger[0]["complete_product_set"])
+
+            allowed_output = root / "report-allowed"
+            allowed_output.mkdir()
+            allowed_args = SimpleNamespace(
+                read_bundle=str(source), long_timeout=10.0,
+                requested_read_levels=["passive", "bar-read", "semantic-read"],
+                physical_capture=[], candidate_max_age_hours=24.0,
+                allow_historical_candidate=True,
+            )
+            allowed_ledger = []
+            TOOL.run_imported_full_dump(
+                allowed_args, ROOT, allowed_output, FakeRunner(),
+                ["0000:01:00.0"], allowed_ledger,
+            )
+            self.assertTrue(Path(allowed_args.physical_capture[0]).is_file())
+            self.assertEqual(
+                allowed_args.candidate_input_provenance,
+                TOOL.CANDIDATE_PROVENANCE_IMPORTED,
+            )
+            self.assertEqual(
+                allowed_ledger[0]["candidate_input_status"],
+                "historical-explicitly-allowed",
+            )
+            self.assertFalse(
+                allowed_ledger[0]["candidate_input_exact_current"]
+            )
 
     def test_import_copy_refuses_symlink(self):
         with tempfile.TemporaryDirectory() as directory:

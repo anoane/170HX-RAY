@@ -312,8 +312,10 @@ python3 "$XRAY" apply "$XRAY_OUT/plan-evidence-only.json" \
   --output "$XRAY_OUT/volatile-apply-validation.json"
 ```
 
-Generate a specimen-bound 18-profile candidate from one native exact-current
-Level-3 capture:
+Generate a specimen-bound 18-profile candidate from one native Level-3 file.
+The offline planner checks same-capture consistency but cannot prove temporal
+currentness; this output is historical review material, not an authoritative
+current report route:
 
 ```sh
 python3 tools/170hx_candidate_plan.py \
@@ -764,11 +766,21 @@ python3 "$XRAY" full-report "$XRAY_OUT/report-inventory" -- \
 ```
 
 Import a previously verified full-dump without a new XRAY BAR/controller
-capture. Host/PCI and query-only driver inventory still run:
+capture. Host/PCI and query-only driver inventory still run; planning from the
+import remains skipped unless historical review is explicitly requested:
 
 ```sh
 python3 "$XRAY" full-report "$XRAY_OUT/report-imported" -- \
   --no-live-capture --read-bundle /absolute/path/to/verified/full-dump
+```
+
+To emit historical, non-authoritative route and option artifacts from that
+bundle, opt in explicitly:
+
+```sh
+python3 "$XRAY" full-report "$XRAY_OUT/report-imported-review" -- \
+  --no-live-capture --read-bundle /absolute/path/to/verified/full-dump \
+  --allow-historical-candidate
 ```
 
 Busy-owner report: passive/BAR requests may proceed, semantic reads are listed
@@ -784,9 +796,13 @@ Maintenance-window report with exact-current plans:
 
 ```sh
 python3 "$XRAY" full-report "$XRAY_OUT/report-maintenance" -- \
-  --read-level passive --read-level bar-read --read-level semantic-read \
-  --physical-capture /absolute/path/to/native-level3.json
+  --read-level passive --read-level bar-read --read-level semantic-read
 ```
+
+Omitting `--physical-capture` is intentional: the verified semantic artifact
+created inside this live invocation is the only input eligible for the
+exact-current route layer. Supplied files never gain current authority from a
+recent timestamp.
 
 The command emits both route models. Inspect the route index, every card status,
 the non-cumulative warning, and the available first-segment manifest reference:
@@ -819,10 +835,13 @@ Automatic post-write epoch advancement is not implemented. Do not copy an old
 manifest, edit `current_epoch`, or rename a withheld marker; use separately
 reviewed tooling that explicitly supports the observed post-write epoch.
 
-Repeat `--physical-capture` and the corresponding card selector as required by
-the exact-current multi-card campaign. A report with missing or historical
-inputs preserves the candidate/manifest layers as explicit skips or failures;
-it does not silently substitute an older card image.
+Repeat `--bdf` for every card in the exact-current multi-card live campaign; the
+single verified semantic observation must contain the same complete BDF set.
+For an external multi-card file or one external file per card, repeat
+`--physical-capture`, select the matching BDFs, and add
+`--allow-historical-candidate`; those outputs remain historical review-only.
+A report with missing or historical inputs does not silently substitute an
+older card image.
 
 Full diagnostics plus ArchBench and 150 W campaign control:
 
@@ -830,7 +849,6 @@ Full diagnostics plus ArchBench and 150 W campaign control:
 python3 "$XRAY" full-report-bench "$XRAY_OUT/report-complete" -- \
   --sudo-read-inventory \
   --read-level passive --read-level bar-read --read-level semantic-read \
-  --physical-capture /absolute/path/to/native-level3.json \
   --power-limit-watts 150 \
   --power-sample-interval-ms 100 \
   --bandwidth-bytes 512M --bandwidth-iterations 200 \

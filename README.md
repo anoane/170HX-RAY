@@ -843,19 +843,23 @@ excluded from both routes and remains rejected/research-only. The separate
 memory and compute profiles remain available for isolated research and
 regression comparisons.
 
-### 1. Generate an exact-current candidate
+### 1. Generate a capture-bound candidate
 
 Use the same native Level-3 artifact for MAIN, RIR, identity, and ordinary
-register context. A cross-date Level-2 candidate is refused:
+register context. A cross-date Level-2 candidate is refused. This direct,
+offline planner proves internal same-capture consistency; it cannot prove that
+the supplied file is temporally exact-current. Treat its output as historical
+review material unless a live full-report invocation produced and promoted the
+verified semantic capture itself:
 
 ```sh
 python3 tools/170hx_candidate_plan.py \
   --root . \
-  --physical-capture /absolute/path/to/exact-level3-capture.json \
+  --physical-capture /absolute/path/to/capture-bound-level3.json \
   --physical-card 0000:01:00.0 \
   --same-capture-context \
   --xray 170HX-XRAY/170HX-XRAY.py \
-  --output candidate-exact-current.json
+  --output candidate-capture-bound.json
 ```
 
 For a multi-card artifact, repeat `--physical-capture` and
@@ -872,7 +876,7 @@ one profile:
 
 ```sh
 python3 tools/170hx_vfi_append_manifest.py compile \
-  --candidate candidate-exact-current.json \
+  --candidate candidate-capture-bound.json \
   --bdf 0000:01:00.0 \
   --profile specimen-hbm-to-defect-ceiling \
   --cold-main /absolute/path/to/main-pass-001.raw-u32le.bin \
@@ -1727,7 +1731,6 @@ and reviewing every access acknowledgement:
 python3 170HX-XRAY.py full-report-bench /absolute/new/report-directory -- \
   --sudo-read-inventory \
   --read-level passive --read-level bar-read --read-level semantic-read \
-  --physical-capture /absolute/path/to/exact-current-level3.json \
   --power-limit-watts 150 \
   --power-sample-interval-ms 100 \
   --bandwidth-bytes 512M --bandwidth-iterations 200 \
@@ -1739,6 +1742,13 @@ python3 170HX-XRAY.py full-report-bench /absolute/new/report-directory -- \
   --gds-size 16M --gds-size 256M --gds-size 1G \
   --gds-io-size 16M
 ```
+
+Do not add `--physical-capture` to that live command. The report promotes only
+the verified semantic artifact it captured in the same invocation into the
+exact-current layer. An explicitly supplied file and every imported bundle are
+historical review inputs regardless of timestamp; using either for planning
+requires `--allow-historical-candidate` and yields zero authoritative current
+route manifests.
 
 `--sudo-read-inventory` permits only the orchestrator's fixed non-interactive
 read-only DMI query; it does not enable a GPU setter or arbitrary elevated

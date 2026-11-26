@@ -199,6 +199,16 @@ CANDIDATE_PROFILES = (
     "review-nvlink-per-link-unsupported",
 )
 CANDIDATE_PROFILE_COUNT = len(CANDIDATE_PROFILES)
+CANDIDATE_PROVENANCE_NONE = "none"
+CANDIDATE_PROVENANCE_EXPLICIT = "explicit-physical-capture"
+CANDIDATE_PROVENANCE_LIVE = "same-invocation-verified-live-semantic"
+CANDIDATE_PROVENANCE_IMPORTED = "verified-imported-full-dump"
+CANDIDATE_PROVENANCES = frozenset((
+    CANDIDATE_PROVENANCE_NONE,
+    CANDIDATE_PROVENANCE_EXPLICIT,
+    CANDIDATE_PROVENANCE_LIVE,
+    CANDIDATE_PROVENANCE_IMPORTED,
+))
 COMPONENT_STATUSES = frozenset((
     "completed", "failed", "skipped", "not-requested",
     "not-yet-supported",
@@ -2156,7 +2166,13 @@ def record_glitch_export_coverage(ledger, status, reason, coverage=None):
 def promote_semantic_capture(args, bundle, index, bdfs, report_root):
     """Bind one verified complete semantic observation to Layer 2 planning."""
     if args.physical_capture:
-        return {"status": "explicit-input-retained", "promoted": False}
+        args.candidate_input_provenance = CANDIDATE_PROVENANCE_EXPLICIT
+        return {
+            "status": "explicit-input-retained-historical",
+            "promoted": False,
+            "provenance": CANDIDATE_PROVENANCE_EXPLICIT,
+            "exact_current": False,
+        }
     candidates = [
         value for value in index.get("observations", [])
         if isinstance(value, dict)
@@ -2187,9 +2203,57 @@ def promote_semantic_capture(args, bundle, index, bdfs, report_root):
     if len(observed) != len(set(observed)) or set(observed) != set(bdfs):
         raise ReportError("semantic capture BDF set differs from report selection")
     args.physical_capture = [str(candidate)]
+    args.candidate_input_provenance = CANDIDATE_PROVENANCE_LIVE
     return {
         "status": "verified-live-semantic-promoted", "promoted": True,
         "artifact": artifact(candidate, report_root),
+        "provenance": CANDIDATE_PROVENANCE_LIVE,
+        "exact_current": True,
+    }
+
+
+def candidate_input_provenance(args):
+    """Return explicit provenance; never infer authority from file age."""
+    provenance = getattr(args, "candidate_input_provenance", None)
+    if provenance is None:
+        provenance = (
+            CANDIDATE_PROVENANCE_EXPLICIT
+            if getattr(args, "physical_capture", None)
+            else CANDIDATE_PROVENANCE_NONE
+        )
+    if provenance not in CANDIDATE_PROVENANCES:
+        raise ReportError("unknown candidate-input provenance: %s" % provenance)
+    return provenance
+
+
+def classify_candidate_input(args, capture_age_hours_max):
+    """Classify currentness from provenance first and age second."""
+    provenance = candidate_input_provenance(args)
+    age_within_limit = (
+        capture_age_hours_max <= args.candidate_max_age_hours
+    )
+    same_invocation_live = (
+        provenance == CANDIDATE_PROVENANCE_LIVE and
+        not bool(args.no_live_capture)
+    )
+    exact_current = same_invocation_live and age_within_limit
+    if provenance != CANDIDATE_PROVENANCE_LIVE:
+        reason_code = "not-same-invocation-live-capture"
+    elif args.no_live_capture:
+        reason_code = "live-provenance-inconsistent-with-offline-mode"
+    elif not age_within_limit:
+        reason_code = "same-invocation-capture-exceeds-age-limit"
+    else:
+        reason_code = "same-invocation-verified-live"
+    return {
+        "provenance": provenance,
+        "capture_age_hours_max": capture_age_hours_max,
+        "candidate_max_age_hours": args.candidate_max_age_hours,
+        "age_within_limit": age_within_limit,
+        "same_invocation_verified_live": same_invocation_live,
+        "exact_current": exact_current,
+        "historical_review_only": not exact_current,
+        "reason_code": reason_code,
     }
 
 
@@ -2444,19 +2508,18 @@ def run_imported_full_dump(args, project, output, runner, bdfs, ledger):
             capture_age = evidence_age_hours(capture_document.get("generated_utc"))
             entry["candidate_capture_age_hours"] = capture_age
             entry["candidate_max_age_hours"] = args.candidate_max_age_hours
-            fresh = capture_age <= args.candidate_max_age_hours
         except ReportError as exc:
             entry["candidate_capture_age_error"] = str(exc)
-            fresh = False
-        if fresh:
-            entry["candidate_input_status"] = "fresh-same-capture-evidence"
-        elif args.allow_historical_candidate:
+        if args.allow_historical_candidate:
             entry["candidate_input_status"] = "historical-explicitly-allowed"
         else:
-            entry["candidate_input_status"] = "historical-or-undated-not-promoted"
+            entry["candidate_input_status"] = "historical-not-promoted"
+        entry["candidate_input_provenance"] = CANDIDATE_PROVENANCE_IMPORTED
+        entry["candidate_input_exact_current"] = False
         if (not args.physical_capture and
-                (fresh or args.allow_historical_candidate)):
+                args.allow_historical_candidate):
             args.physical_capture = [str(semantic_capture)]
+            args.candidate_input_provenance = CANDIDATE_PROVENANCE_IMPORTED
             entry["candidate_input"] = artifact(semantic_capture, output)
     ledger.append(entry)
     record_full_dump_coverage(index, ledger, "verified-import")
@@ -3892,36 +3955,46 @@ def run_candidates(args, project, output, runner, bdfs, ledger):
                 physical = card.get("physical_capture") if isinstance(card, dict) else None
                 generated = physical.get("generated_utc") if isinstance(physical, dict) else None
                 capture_ages.append(evidence_age_hours(generated))
-            entry["candidate_capture_age_hours_max"] = max(capture_ages)
-            entry["candidate_max_age_hours"] = args.candidate_max_age_hours
-            offline_review_only = bool(args.no_live_capture)
-            historical = (
-                max(capture_ages) > args.candidate_max_age_hours or
-                offline_review_only
+            classification = classify_candidate_input(
+                args, max(capture_ages)
             )
+            entry["candidate_input_classification"] = classification
+            entry["candidate_input_provenance"] = classification["provenance"]
+            entry["candidate_capture_age_hours_max"] = classification[
+                "capture_age_hours_max"
+            ]
+            entry["candidate_max_age_hours"] = classification[
+                "candidate_max_age_hours"
+            ]
+            historical = classification["historical_review_only"]
             entry["candidate_freshness"] = (
-                "offline-import-review-only" if offline_review_only else
-                "historical-explicitly-allowed" if historical and
-                args.allow_historical_candidate else
-                "fresh-same-capture-evidence" if not historical else
-                "rejected-historical"
+                "exact-current-same-invocation-verified-live"
+                if not historical else
+                "historical-explicitly-allowed"
+                if args.allow_historical_candidate else
+                "historical-requires-explicit-allow"
             )
             if historical and not args.allow_historical_candidate:
                 entry["status"] = "failed"
-                entry["reason"] = (
-                    "same-capture evidence exceeds --candidate-max-age-hours; "
-                    "historical data was not promoted as exact-current"
-                )
-            elif offline_review_only:
-                entry["reason"] = (
-                    "offline capture accepted for historical review under "
-                    "--allow-historical-candidate; freshness alone cannot prove "
-                    "that no intervening device-state change occurred"
-                )
+                if (classification["reason_code"] ==
+                        "same-invocation-capture-exceeds-age-limit"):
+                    entry["reason"] = (
+                        "same-invocation live evidence exceeds "
+                        "--candidate-max-age-hours; historical review requires "
+                        "--allow-historical-candidate"
+                    )
+                else:
+                    entry["reason"] = (
+                        "candidate input is not the verified semantic capture "
+                        "produced by this live report invocation; explicit and "
+                        "imported inputs are historical and require "
+                        "--allow-historical-candidate"
+                    )
             elif historical:
                 entry["reason"] = (
-                    "historical same-capture profiles generated under explicit "
-                    "--allow-historical-candidate; not exact-current"
+                    "historical profiles generated under explicit "
+                    "--allow-historical-candidate; file age does not confer "
+                    "exact-current status"
                 )
             if entry["status"] == "completed":
                 entry["levels_completed"] = ["semantic-read"]
@@ -4522,7 +4595,7 @@ def render(document, output, commands):
             )
     lines.extend([
         "",
-        "Every completed full-dump level exports the complete XRAY JSON plus all supported JSON/JSONL/indexed-text/raw-u32le and explicitly acknowledged public-compatible formats. Exact-current append candidates require same-session native Level-3 evidence.",
+        "Every completed full-dump level exports the complete XRAY JSON plus all supported JSON/JSONL/indexed-text/raw-u32le and explicitly acknowledged public-compatible formats. Exact-current append candidates require the verified semantic capture produced inside this same live report invocation; supplied files remain historical.",
         "", "## Permanent route models", "",
         "1. **Retain CMP identity/VBIOS:** review the common-topology segment from epoch 000, then withhold isolated PCIe until a cold recapture and rebase. Keep device ID `20c2`; VBIOS and CMP driver/EFI memory/PCIe policy remain external. NVLink, SYS_PIPE and media are separate non-route overlays.",
         "2. **Convert to A100 identity/VBIOS:** perform and cold-verify the common topology stages first, prepare a recoverable A100 VBIOS migration, and place the `20b5` identity records last as their own commit domain. After the A100 VBIOS is proven, apply the required software SM/topology policy; A100 identity alone does not manufacture healthy SMs, HBM, media engines, NVLink routing, ECC, or MIG sufficiency.",
@@ -4940,23 +5013,36 @@ def build_parser():
         "--read-bundle",
         help=(
             "verified prior full-dump directory to import into this report; "
-            "requires --no-live-capture and can supply its complete semantic "
-            "observation to the exact-current candidate planner"
+            "requires --no-live-capture; its semantic observation remains "
+            "historical and enters planning only with "
+            "--allow-historical-candidate"
         ),
     )
     parser.add_argument("--no-live-capture", action="store_true")
     parser.add_argument("--owner-busy", action="store_true")
     parser.add_argument("--allow-bound-controller", action="store_true")
-    parser.add_argument("--physical-capture", action="append", default=[])
+    parser.add_argument(
+        "--physical-capture", action="append", default=[],
+        help=(
+            "external native Level-3 input; always historical/review-only and "
+            "requires --allow-historical-candidate when used for planning; "
+            "omit it to auto-promote this invocation's verified live semantic "
+            "capture"
+        ),
+    )
     parser.add_argument(
         "--candidate-max-age-hours", type=positive, default=24.0,
-        help="maximum capture age promoted as exact-current (default: 24)",
+        help=(
+            "maximum age accepted for the same-invocation verified live "
+            "capture (default: 24); age never makes an external/imported file "
+            "exact-current"
+        ),
     )
     parser.add_argument(
         "--allow-historical-candidate", action="store_true",
         help=(
-            "explicitly permit an older internally same-capture plan; the "
-            "report labels it historical and never calls it exact-current"
+            "explicitly permit external, imported, or older evidence for a "
+            "historical review plan; the report never calls it exact-current"
         ),
     )
     parser.add_argument("--benchmarks", action="store_true")
