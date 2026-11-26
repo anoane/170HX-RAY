@@ -6,7 +6,7 @@ distinguishes passes, bounded warnings, pending external scans, and actions
 that were deliberately not executed. A source hash proves byte identity; it
 does not prove that an irreversible fuse plan is electrically safe.
 
-## Current 4.3.0 runtime matrix
+## Pre-submodule 4.3.0 runtime matrix
 
 | Surface | Python 3.9 (Docker) | Python 3.14.8 | Python 3.15.2 |
 |---|---:|---:|---:|
@@ -19,13 +19,17 @@ canonical appendix and requires exact equality with the frontend, candidate,
 compiler and independent runtime contracts; it no longer relies only on token
 presence plus a digest. `git diff --check` passes for the research worktree.
 
-The clean public tree also passed all 308 discovered tests in the full
-workspace (one explicit skip for unredistributed public-source fixtures). A
-second run from an isolated temporary parent passed the same 308-test suite
-with 64 explicit skips for retained card evidence, the missing peer edition,
-and unredistributed source-lineage checks. Those skips are visible prerequisites,
-not synthetic passes; deterministic parser, planner and VFI state-machine
-coverage remains active.
+Those research/sanitized counts predate the source-only ArchBench extraction
+and are retained rather than silently rewritten. After the extraction, the
+initialized clean public tree passed all 312 discovered tests with one explicit
+skip for an unavailable optional fixture. A clean recursive clone passed all
+312 tests with 64 explicit skips for retained card evidence, the missing peer
+edition and unredistributed source lineage. A clean non-recursive clone passed
+the same suite with 65 skips: the additional skip is the test requiring
+initialized submodule Git metadata. Attempting an ArchBench report in that
+state failed with the actionable initialization instruction. Those skips are
+visible prerequisites, not synthetic passes; deterministic parser, planner and
+VFI state-machine coverage remains active.
 
 ## Current addendum (supersedes historical toolchain blockers)
 
@@ -139,7 +143,7 @@ generates specimen-local output with `full-report` or `full-report-bench`.
 | Package `SHA256SUMS` | `SEALED`; exact digest is recorded in the non-self-referential `RELEASE_HASHES.md` ledger |
 | Git commit | recorded by repository history; query `git rev-parse HEAD` because a commit cannot embed its own hash |
 | GitHub contents | source-only; reports, raw/private evidence, caches and build products are excluded |
-| Licensing | first-party userspace/docs AGPL-3.0-or-later; kernel and embedded ArchBench retain their stated GPL/MIT terms |
+| Licensing | first-party userspace/docs AGPL-3.0-or-later; kernel retains its stated GPL terms; the independent ArchBench submodule is `AGPL-3.0-or-later OR MIT` |
 | Daybreak security scan | recorded after the clean repository is pushed; an absent or unfinished scan is never represented as clean |
 
 A failed or unfinished external scan with zero findings must never be reported

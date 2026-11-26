@@ -527,19 +527,21 @@ correctness/capability gate, not exhaustive CUDA operation/dtype/shape
 coverage, sustained-peak proof, a full-memory sweep, long-duration stability
 evidence, sanitizer coverage or profiler evidence:
 
-Build the embedded SM80 worker once on the Linux/CUDA host:
+Initialize and build the pinned ArchBench SM80 worker once on the Linux/CUDA host:
 
 ```sh
+git -C "$XRAY_ROOT" submodule update --init --recursive
 cd "$XRAY_ROOT/third_party/archbench_cuda13_5_v0_2_0"
 ./bench selftest
 ./bench build --arch 80 --nvcc /usr/local/cuda-13.5/bin/nvcc --jobs 4
 cd "$XRAY_ROOT"
 ```
 
-The report command defaults to that embedded source and
-`third_party/archbench_cuda13_5_v0_2_0/build/bin/archbench_sm80`. Pass
-`--archbench-root` and `--archbench-binary` only to select a different reviewed
-tree or worker explicitly.
+The report command defaults to that commit-pinned submodule and verifies its
+commit, tree, tracked-file count and clean tracked state against
+`docs/ARCHBENCH_SUBMODULE_LOCK.json` before execution. `--archbench-root`
+selects a different reviewed tree and derives `build/bin/archbench_sm80` below
+it; pass `--archbench-binary` only when that reviewed worker is elsewhere.
 
 ```sh
 python3 tools/170hx_full_report.py "$XRAY_OUT/report-archbench" \

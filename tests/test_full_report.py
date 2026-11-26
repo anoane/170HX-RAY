@@ -519,14 +519,39 @@ class FullReportTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             TOOL.build_parser().parse_args(["out", "--bdf", "01:00.0"])
 
-    def test_archbench_defaults_resolve_to_embedded_source(self):
+    def test_archbench_defaults_resolve_to_pinned_submodule(self):
         parsed = TOOL.build_parser().parse_args(["out"])
         expected = ROOT / "third_party" / "archbench_cuda13_5_v0_2_0"
         self.assertEqual(Path(parsed.archbench_root), expected)
-        self.assertEqual(
-            Path(parsed.archbench_binary),
-            expected / "build" / "bin" / "archbench_sm80",
-        )
+        self.assertIsNone(parsed.archbench_binary)
+
+    def test_archbench_missing_submodule_and_worker_have_actionable_failures(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            args = self.arguments(root / "report")
+            args.archbench = True
+            args.archbench_root = str(root / "missing-submodule")
+            args.archbench_binary = str(root / "missing-worker")
+            ledger = []
+            TOOL.run_archbench(args, root, FakeRunner(), [], ledger)
+            self.assertIn("git submodule update --init --recursive",
+                          ledger[0]["reason"])
+
+            source = root / "source"
+            (source / "configs").mkdir(parents=True)
+            (source / "bench").write_text("#!/bin/sh\n", encoding="utf-8")
+            (source / "configs" / "acceptance.json").write_text(
+                "{}\n", encoding="utf-8"
+            )
+            args.archbench_root = str(source)
+            args.archbench_binary = None
+            ledger = []
+            TOOL.run_archbench(args, root, FakeRunner(), [], ledger)
+            self.assertIn("./bench build --arch 80", ledger[0]["reason"])
+            self.assertEqual(
+                ledger[0]["worker"],
+                str((source / "build" / "bin" / "archbench_sm80").resolve()),
+            )
 
     def test_report_modes_are_disjoint_and_fail_closed(self):
         parser = TOOL.build_parser()

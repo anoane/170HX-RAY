@@ -60,12 +60,15 @@ class SanitizedBoundaryTests(unittest.TestCase):
                                 for token in literal_tokens)
         findings = []
         for path in sorted(ROOT.rglob("*")):
+            relative = path.relative_to(ROOT)
+            if ".git" in relative.parts:
+                continue
             if not path.is_file():
                 continue
             raw = path.read_bytes()
             folded = raw.lower()
             if any(token in folded for token in forbidden_bytes):
-                findings.append("%s:binary-token" % path.relative_to(ROOT))
+                findings.append("%s:binary-token" % relative)
                 # Text scanning would report the same literal a second time.
                 continue
             try:
@@ -75,7 +78,7 @@ class SanitizedBoundaryTests(unittest.TestCase):
             for line_number, line in enumerate(text.splitlines(), 1):
                 if any(pattern.search(line) for pattern in forbidden):
                     findings.append(
-                        "%s:%d" % (path.relative_to(ROOT), line_number)
+                        "%s:%d" % (relative, line_number)
                     )
         self.assertEqual(findings, [])
 

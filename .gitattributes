@@ -11,6 +11,3 @@
 *.xz binary
 *.zip binary
 *.zst binary
-
-# Preserve byte-identical vendored source even when upstream keeps a blank EOF line.
-third_party/** whitespace=-blank-at-eof

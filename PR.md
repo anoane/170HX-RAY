@@ -202,10 +202,14 @@ Before merge/release:
 2. rerun all normal/sanitized runtime suites and boundary scans;
 3. rebuild helpers and ABI tests on the target Linux kernel;
 4. generate a fresh complete report with explicit skips;
-5. regenerate `RELEASE_HASHES.md` and verify every listed file;
-6. verify the repository from a clean clone;
-7. tag/commit the exact tested tree; and
-8. publish only after the commit, report and hashes agree.
+5. regenerate `SHA256SUMS` and `RELEASE_HASHES.md`, then verify every listed
+   file;
+6. verify both a non-recursive clone's fail-closed behavior and a clean
+   `git clone --recurse-submodules` checkout;
+7. verify `.gitmodules`, the ArchBench lock file, and the mode-`160000` gitlink
+   all bind the exact reviewed submodule commit;
+8. tag/commit the exact tested tree; and
+9. publish only after the commit, report and hashes agree.
 
 No green software gate proves that a fuse image is electrically safe or that an
 unmarked hardware unit is healthy.

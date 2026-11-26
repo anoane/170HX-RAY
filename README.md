@@ -10,6 +10,23 @@
 
 **[Usage](./USAGE.md) · [unlock-plan contract](./UNLOCK_PLAN.md) · [public-tool comparison](./docs/TOOL_COMPARISON.md) · [plan models](./docs/PLAN_MODELS.md) · [credits](./docs/CREDITS.md) · [contributing and release gates](./PR.md)**
 
+Clone with the pinned ArchBench dependency:
+
+```sh
+git clone --recurse-submodules https://github.com/anoane/170HX-RAY.git
+cd 170HX-RAY
+```
+
+For an existing clone:
+
+```sh
+git -C /path/to/170HX-RAY submodule update --init --recursive
+```
+
+Both repositories are currently private, so the GitHub credential used for a
+recursive clone must be authorized for `anoane/170HX-RAY` and
+`anoane/archbench`.
+
 170HX-XRAY is an evidence-oriented GA100/CMP 170HX observer, physical-row
 collector, FF/IFF/RIR decoder, and fail-closed planning tool. It is intended to
 answer *what this exact card contains* before anyone proposes an irreversible
@@ -29,13 +46,17 @@ read-only compatibility normalization; every newly emitted schema, key, profile
 and helper identity uses XRAY. The broader evidence and operational conclusions live
 in the [research runbook](docs/PROVENANCE.md#workspace-only-evidence).
 
-ArchBench 0.2.0 source is embedded under
+ArchBench 0.2.0 is a separately versioned, commit-pinned Git submodule under
 [`third_party/archbench_cuda13_5_v0_2_0`](./third_party/archbench_cuda13_5_v0_2_0/)
-under its original MIT license. On the Linux/CUDA host, build the SM80 worker
-once with `./bench selftest` and `./bench build --arch 80`; XRAY then discovers
-that embedded source root and `build/bin/archbench_sm80` automatically. The
-`--archbench-root` and `--archbench-binary` options remain available for a
-separately reviewed build.
+from [anoane/archbench](https://github.com/anoane/archbench). It is offered under
+`AGPL-3.0-or-later OR MIT`, preserving its original MIT grant. On the Linux/CUDA
+host, build the SM80 worker once with `./bench selftest` and
+`./bench build --arch 80`; XRAY then discovers the initialized submodule and
+`build/bin/archbench_sm80` automatically. The exact URL, commit and tree are
+locked in [`docs/ARCHBENCH_SUBMODULE_LOCK.json`](./docs/ARCHBENCH_SUBMODULE_LOCK.json). The
+report verifies the initialized checkout against that lock before execution.
+`--archbench-root` selects a separately reviewed tree and automatically derives
+its `build/bin/archbench_sm80`; `--archbench-binary` overrides that worker path.
 
 The maintainers retain a complete four-card validated demonstration report,
 but it is deliberately not distributed in this source repository: it contains
@@ -1991,8 +2012,9 @@ Original first-party userspace source and documentation are copyright 2026
 Fabiano Anemone (`fabiano.anemone@gmail.com`) and licensed under the
 [GNU Affero General Public License, version 3 or later](./LICENSE). See
 [`NOTICE`](./NOTICE) for the exact boundary. Linux kernel helpers retain their
-file-level GPL-2.0 identifiers and Linux syscall-note exceptions. The embedded
-ArchBench subtree retains its original MIT license and contributor copyright;
+file-level GPL-2.0 identifiers and Linux syscall-note exceptions. The independent
+ArchBench submodule is dual-licensed `AGPL-3.0-or-later OR MIT` and retains its
+original contributor copyright and MIT grant;
 third-party evidence retains its own provenance and is not relicensed by XRAY.
 
 ## Credits and provenance

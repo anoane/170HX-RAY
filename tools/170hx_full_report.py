@@ -31,9 +31,10 @@ VERSION = "0.5.0"
 SCHEMA = "170hx-xray-full-report-v1"
 REPORT_MODES = ("report", "report+bench")
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-EMBEDDED_ARCHBENCH_ROOT = (
+ARCHBENCH_SUBMODULE_ROOT = (
     PROJECT_ROOT / "third_party" / "archbench_cuda13_5_v0_2_0"
 )
+ARCHBENCH_SUBMODULE_LOCK = PROJECT_ROOT / "docs" / "ARCHBENCH_SUBMODULE_LOCK.json"
 BENCHMARK_ONLY_OPTIONS = frozenset((
     "--benchmarks", "--set-power-limit", "--power-limit-watts",
     "--power-sample-interval-ms", "--bandwidth-bytes",
@@ -2354,6 +2355,80 @@ def uuid_map(runner, smi):
     return result, mapping
 
 
+def archbench_source_binding(root):
+    """Fail closed if the canonical ArchBench checkout differs from its lock."""
+    canonical = ARCHBENCH_SUBMODULE_ROOT.resolve()
+    if root != canonical:
+        return {
+            "kind": "explicit-custom-root",
+            "root": str(root),
+            "pin_verified": False,
+            "reason": (
+                "custom ArchBench roots are outside the repository submodule "
+                "lock and require separate review"
+            ),
+        }
+    try:
+        lock = strict_json(ARCHBENCH_SUBMODULE_LOCK)
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ReportError("cannot load ArchBench submodule lock: %s" % exc) from exc
+    required = ("path", "url", "commit", "tree", "expected_tracked_files")
+    missing = [name for name in required if name not in lock]
+    if missing:
+        raise ReportError(
+            "ArchBench submodule lock lacks: %s" % ", ".join(missing)
+        )
+    if lock["path"] != str(root.relative_to(PROJECT_ROOT)):
+        raise ReportError("ArchBench submodule lock path does not match checkout")
+
+    def git(*argv):
+        completed = subprocess.run(
+            ["git", "-C", str(root), *argv], check=False,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10,
+        )
+        if completed.returncode:
+            detail = completed.stderr.decode("utf-8", "replace").strip()
+            raise ReportError(
+                "cannot verify ArchBench submodule %s: %s" %
+                (" ".join(argv), detail or "git returned nonzero")
+            )
+        return completed.stdout
+
+    head = git("rev-parse", "HEAD").decode("ascii", "strict").strip()
+    tree = git("rev-parse", "HEAD^{tree}").decode("ascii", "strict").strip()
+    tracked = [value for value in git("ls-files", "-z").split(b"\0") if value]
+    dirty = git("status", "--porcelain", "--untracked-files=no")
+    expected_count = lock["expected_tracked_files"]
+    if not isinstance(expected_count, int) or isinstance(expected_count, bool):
+        raise ReportError("ArchBench expected_tracked_files is not an integer")
+    mismatches = []
+    if head != lock["commit"]:
+        mismatches.append("commit %s != %s" % (head, lock["commit"]))
+    if tree != lock["tree"]:
+        mismatches.append("tree %s != %s" % (tree, lock["tree"]))
+    if len(tracked) != expected_count:
+        mismatches.append(
+            "tracked files %d != %d" % (len(tracked), expected_count)
+        )
+    if dirty:
+        mismatches.append("tracked files are locally modified")
+    if mismatches:
+        raise ReportError(
+            "ArchBench submodule does not match its reviewed lock: %s" %
+            "; ".join(mismatches)
+        )
+    return {
+        "kind": "pinned-submodule",
+        "root": str(root),
+        "pin_verified": True,
+        "url": lock["url"],
+        "commit": head,
+        "tree": tree,
+        "tracked_files": len(tracked),
+        "lock": str(ARCHBENCH_SUBMODULE_LOCK.relative_to(PROJECT_ROOT)),
+    }
+
+
 def run_archbench(args, output, runner, bdfs, ledger):
     if not args.archbench:
         ledger.append(item(
@@ -2363,12 +2438,34 @@ def run_archbench(args, output, runner, bdfs, ledger):
         return
     root = Path(args.archbench_root).resolve()
     bench = root / "bench"
-    worker = Path(args.archbench_binary).resolve()
+    worker = (
+        Path(args.archbench_binary).resolve() if args.archbench_binary
+        else root / "build" / "bin" / "archbench_sm80"
+    )
     matrix = root / "configs" / "acceptance.json"
-    if not bench.is_file() or not worker.is_file() or not matrix.is_file():
+    if not bench.is_file() or not matrix.is_file():
         ledger.append(item(
             "archbench-acceptance-235", "failed",
-            "runner, SM80 worker, or acceptance matrix absent",
+            "ArchBench source is absent or incomplete; initialize the pinned "
+            "submodule with: git submodule update --init --recursive",
+            bench=str(bench), worker=str(worker), matrix=str(matrix),
+        ))
+        return
+    try:
+        source_binding = archbench_source_binding(root)
+    except (OSError, UnicodeError, UnicodeDecodeError, subprocess.SubprocessError,
+            ReportError, ValueError) as exc:
+        ledger.append(item(
+            "archbench-acceptance-235", "failed",
+            "ArchBench source pin verification failed: %s" % exc,
+            bench=str(bench), worker=str(worker), matrix=str(matrix),
+        ))
+        return
+    if not worker.is_file():
+        ledger.append(item(
+            "archbench-acceptance-235", "failed",
+            "ArchBench SM80 worker is absent; build it in the submodule with: "
+            "./bench build --arch 80",
             bench=str(bench), worker=str(worker), matrix=str(matrix),
         ))
         return
@@ -2423,7 +2520,7 @@ def run_archbench(args, output, runner, bdfs, ledger):
                 "requested_sampling_interval_seconds":
                     args.archbench_telemetry_interval,
                 "provenance": (
-                    "NVML whole-worker samples emitted by the pinned ArchBench "
+                    "NVML whole-worker samples emitted by the selected ArchBench "
                     "runner and nvidia-smi limit queries bound to this BDF/UUID"
                 ),
             },
@@ -2489,7 +2586,7 @@ def run_archbench(args, output, runner, bdfs, ledger):
             "not the 404,129-case catalogue or sustained peak proof"
         ),
         requested_power_limit_watts=args.power_limit_watts,
-        gpu_query=query_record, per_card=per_card,
+        source_binding=source_binding, gpu_query=query_record, per_card=per_card,
     ))
 
 
@@ -3022,7 +3119,7 @@ def build_report(args, project=None, runner=None):
 
 
 def build_parser():
-    archbench = str(EMBEDDED_ARCHBENCH_ROOT)
+    archbench = str(ARCHBENCH_SUBMODULE_ROOT)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output_dir", help="new private report directory")
     parser.add_argument(
@@ -3103,10 +3200,14 @@ def build_parser():
     parser.add_argument("--archbench", action="store_true")
     parser.add_argument(
         "--archbench-root", default=archbench,
-        help="ArchBench source root (default: the embedded third_party snapshot)",
+        help="ArchBench source root (default: the initialized pinned submodule)",
     )
     parser.add_argument(
-        "--archbench-binary", default=archbench + "/build/bin/archbench_sm80"
+        "--archbench-binary", default=None,
+        help=(
+            "ArchBench worker (default: build/bin/archbench_sm80 below the "
+            "selected --archbench-root)"
+        ),
     )
     parser.add_argument(
         "--archbench-case-timeout", type=positive_integer, default=600

@@ -1,0 +1,16 @@
+{
+  "schema": "170hx-xray-submodule-lock-v1",
+  "name": "ArchBench",
+  "version": "0.2.0",
+  "path": "third_party/archbench_cuda13_5_v0_2_0",
+  "url": "https://github.com/anoane/archbench.git",
+  "commit": "ff3cc65815b71602760ff569d33f9a2fcdf32add",
+  "tree": "89e7500890f353e739da0c74abeb55dfb49c56a6",
+  "license_expression": "AGPL-3.0-or-later OR MIT",
+  "expected_tracked_files": 103,
+  "validation": {
+    "host_tests": "132/132 passed",
+    "independent_alu_transitions": 532480,
+    "cuda_disabled_ctest": "3/3 passed"
+  }
+}

@@ -12,8 +12,10 @@ licenses (and the Linux-syscall-note exception where stated) for Linux-kernel
 compatibility. Those file-level SPDX identifiers control over the repository
 default.
 
-Vendored ArchBench files under third_party/archbench_cuda13_5_v0_2_0 retain
-their MIT license and ArchBench contributor copyright. Other third-party,
+The ArchBench Git submodule under third_party/archbench_cuda13_5_v0_2_0 is a
+separately versioned repository governed by its own LICENSE and NOTICE. It is
+offered under AGPL-3.0-or-later OR MIT; its original MIT grant and ArchBench
+contributor copyright remain intact. Other third-party,
 historical, captured, generated, or evidentiary materials retain the licenses
 and provenance stated in their files; this notice does not claim authorship or
 relicense material that Fabiano Anemone does not own.
