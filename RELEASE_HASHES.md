@@ -21,7 +21,7 @@ this Git history.
 | Candidate planner | 0.5.0 |
 | VFI manifest compiler | 0.5.0 |
 | Full-release bundler | 0.4.0 |
-| ArchBench submodule | 0.2.0 at `72ec2b6543e036012d7028f39333e8b16c699af7`, `AGPL-3.0-or-later` |
+| ArchBench submodule | 0.2.0 at `e0852fa34933c605fca780180d23c13af2927265`, `AGPL-3.0-or-later` |
 
 ## Validation
 
@@ -53,7 +53,7 @@ this Git history.
 - Semgrep reports ten reviewed owner-only-mode false positives, zero timeouts,
   and two explicit Linux-macro partial-parse warnings. Kbuild, Sparse and
   clang-tidy remain the controlling C evidence.
-- The pinned ArchBench repository passed 132/132 host tests, its independent
+- The pinned ArchBench repository passed 134/134 host tests, its independent
   532,480-transition ALU check and 3/3 CUDA-disabled CTest targets.
 
 Software validation does not establish electrical fuse-programming safety,
