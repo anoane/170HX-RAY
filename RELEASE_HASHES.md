@@ -30,6 +30,15 @@ this Git history.
 - The current initialized public tree passed all 324 discovered tests with one
   intentional skip for raw third-party source fixtures that are represented by
   a hash-only lineage descriptor and are not redistributed.
+- A standalone clean recursive clone at commit `a3811d20ffe44785a7999e42c31f087118fd4d0b`
+  also discovered all 324 tests and passed with 64 explicit skips. Those skips
+  cover the intentionally unshipped retained-hardware fixtures, peer editions,
+  and raw third-party fixture—not test failures. Its initialized ArchBench
+  submodule matched the pinned `72ec2b6543e036012d7028f39333e8b16c699af7`.
+- A clean non-recursive clone passed the same 324-test suite with 65 explicit
+  skips: the same 64 standalone-release skips plus the intentionally
+  uninitialized ArchBench submodule check. Both clones verified the complete
+  63-entry release manifest before publication.
 - The generated `UNLOCK_PLAN.md` contract exactly matches the frontend,
   candidate planner, compiler and independent runtime allowlists.
 - Retained four-card evidence replay completed all three non-authorizing
@@ -61,7 +70,7 @@ frozen:
 
 | Manifest entries | `SHA256SUMS` SHA-256 |
 |---:|---|
-| 63 | `76db1a23c677190d87d609682c9185ea7ec44e160c9a94d01fd1edfbaf7e7d67` |
+| 63 | `b8a329056cd9464a74b495d70c162fba2051393d7cd912c480b41563e1c5abd7` |
 
 Repository commit identity is recorded by Git after the manifest is generated;
 a commit cannot embed its own final hash. Daybreak scan identity/status is

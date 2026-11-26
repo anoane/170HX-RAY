@@ -27,6 +27,17 @@ hashes and provenance remain bound by `evidence/public/public-source-lineage.jso
 and the first-party public-plan audit is still exercised. Deterministic parser,
 planner and VFI state-machine coverage remains active.
 
+Two source-release clone gates were then run at
+`a3811d20ffe44785a7999e42c31f087118fd4d0b`. A clean recursive clone passed all
+324 discovered tests with 64 explicit skips and initialized ArchBench at the
+exact pinned commit `72ec2b6543e036012d7028f39333e8b16c699af7`. A clean
+non-recursive clone passed all 324 with 65 explicit skips; the only additional
+skip was the deliberately uninitialized submodule check. The other standalone
+clone skips are the expected retained-hardware, peer-edition, cold-verifier,
+receipt-integration, and raw-third-party fixtures that this source release does
+not redistribute. Neither clone had a failure, and both verified the complete
+63-entry root `SHA256SUMS` file.
+
 The 0.7.0 full-report contract was also replayed end to end against retained
 four-card evidence. The verified full-dump contained all nine MAIN formats,
 all four RIR formats, all four register formats, and all four checklist models
