@@ -1,6 +1,6 @@
 # 170HX-XRAY unlock-plan contract
 
-<!-- XRAY-PLAN-CONTRACT-SHA256: 66ee5c383ef4201601742f042c276257589f8b5f20a83e3c10c0cdf3a609348d -->
+<!-- XRAY-PLAN-CONTRACT-SHA256: 0e5c018841776b39146ad1d0ce8a5f251eb755602faf870e68695709c2e6da2e -->
 
 This document is the code-level contract for XRAY planning. It describes what
 the software actually represents, which coordinates it uses, which ordering it
@@ -33,11 +33,14 @@ any of those objects must update this document and digest together.
 - **Unsupported**: no defensible physical target exists. No output format or
   confirmation prompt upgrades an unsupported target.
 
-Current inventory: 11 observation goals, 18 candidate profiles, six of them
+Current inventory: 11 observation goals, 24 candidate profiles, twelve of them
 zero-operation review-only profiles, and seven compiler/runtime-eligible
-profiles. The compiler is version `0.5.0`; its allowlist reduction is a safety
-policy and changes its source hash even though the sealed schema and backend ID
-`ga100-vfi-ff-append-v1` remain unchanged.
+profiles. The frontend is version `4.4.0`; the candidate planner and compiler
+are version `0.6.0`; and the backend is version `1.1.0`. Its allowlist
+reduction is a safety policy and changes its source hash even though the backend
+ID remains `ga100-vfi-ff-append-v1`. The current sealed schema is
+`170hx-xray-otp-sealed-manifest-v3`; v2 is retired rather than silently
+reinterpreted.
 
 ## Three planning layers
 
@@ -49,7 +52,19 @@ policy and changes its source hash even though the sealed schema and backend ID
 
 These layers must not be described as interchangeable. In particular, the
 presence of a field in the frontend catalog, a row dump, or a candidate profile
-does not imply that the v2 compiler accepts it.
+does not imply that the v3 compiler accepts it.
+
+The current capture certificate records two complete passes serialized inside
+one helper ioctl transaction. It must explicitly bind
+`two_passes_in_one_helper_serialized_ioctl_transaction=true` and
+`hardware_atomic_snapshot=false`; helper serialization is not a hardware-atomic
+snapshot. After arming, the two complete 512-row images must exactly equal the
+held-state image, including the FF prefix, IFF header/payload and tail. The live
+transport still uses userspace `resource0` mmap, so its ownership sentinel,
+resource-inode binding and immediate pre-command re-attestation narrow but do
+not atomically close the PCI bind/remove TOCTOU. The offline
+`inert-then-arm-experimental-trace-only` two-pulse model is not an executable
+strategy and cannot reach authorization or live command issue.
 
 ## Input and output formats
 
@@ -181,7 +196,7 @@ that ceiling and be measured after each identity/ROM stage.
 - `OPT_PCIE_DEVIDA` and `OPT_PCIE_DEVIDB` both target `0x20b5`.
 - The four isolated PCIe gate bits target zero.
 - Raw whole-word targets are admitted only by the offline profiles that declare
-  exact expected old values. They are not in the v2 execution allowlist.
+  exact expected old values. They are not in the v3 execution allowlist.
 
 ### FF record and allocation rules
 
@@ -215,7 +230,7 @@ This is the human review surface for every entry in the live
 `LOGICAL_FIELD_CATALOG`, including entries that intentionally generate no
 operation. The frontend never authorizes planning from this table: all 36
 catalog entries have `planning_allowed=false`. The companion candidate planner
-duplicates a subset of coordinates and checks them against the catalog; the v2
+duplicates a subset of coordinates and checks them against the catalog; the v3
 compiler and runtime then independently pin a still smaller subset. A catalog
 coordinate, a candidate operation, manifest eligibility and authorization are
 four different statements.
@@ -253,8 +268,8 @@ four different statements.
 | `OPT_SM_SPEED_SELECT_DP_CONTROL` | Conventional rows 6/7 bit 27, 65% proposed undo/control semantics | The name/adjacency is real, but available static specimens and cold tests do not prove undo behavior | Zero-operation `review-dp-conventional`; rejected |
 | `OPT_SW_SMC_DISABLE` | Conventional rows 14/15 bit 11, 99% coordinate | MIG evidence input only; no primary/redundant/RIR execution rule or complete MIG sufficiency exists | Frontend-only unsupported hypothesis; no candidate operation |
 | `OPT_NVDEC_DISABLE` | C1 bits 139–143, 5 bits, 90% | Direct `OPT_NVDEC_DEFECTIVE`; enable only non-defective decoder instances | Experimental candidate; eligible only in media/MIG profile |
-| `NVJPG_OFA_DISABLE_CANDIDATE_BIT146` | C1 bit 146; 88% unordered-set relation, 0% individual attribution | Target zero only with bit 371 and only when both NVJPG/OFA direct defect words are zero | Experimental inseparable pair; two-operation commit only |
-| `NVJPG_OFA_DISABLE_CANDIDATE_BIT371` | C1 bit 371; 88% unordered-set relation, 0% individual attribution | Target zero only with bit 146 and only when both NVJPG/OFA direct defect words are zero | Experimental inseparable pair; two-operation commit only |
+| `NVJPG_OFA_DISABLE_CANDIDATE_BIT146` | C1 bit 146; 88% unordered-set relation, 0% individual attribution | Target zero only with bit 371 and only when both NVJPG/OFA direct defect words are zero | One inseparable logical intent; sequential append with an asymmetric prefix |
+| `NVJPG_OFA_DISABLE_CANDIDATE_BIT371` | C1 bit 371; 88% unordered-set relation, 0% individual attribution | Target zero only with bit 146 and only when both NVJPG/OFA direct defect words are zero | One inseparable logical intent; sequential append with an asymmetric prefix |
 | `OPT_NVJPG_DISABLE` | Direct width 1; individual physical coordinate 0%; set `{146,371}` 88% | Direct option/defect/status evidence validates the pair but cannot name one bit | Observation alias only; rejected individually |
 | `OPT_NVENC_DISABLE` | Direct width 2; physical coordinate and supported target 0% | Inventory option/CP/control/defect/status/PTOP only; production A100 has no NVENC and retained cards show no usable engine | Zero-operation `review-nvenc-unsupported`; rejected |
 | `OPT_OFA_DISABLE` | Direct width 1; individual physical coordinate 0%; set `{146,371}` 88% | Direct option/defect/status evidence validates the pair but cannot name one bit | Observation alias only; rejected individually |
@@ -267,7 +282,7 @@ it to zero.
 
 ### Compiler/runtime component policy
 
-The v2 compiler and runtime keep independent copies of the following physical
+The v3 compiler and runtime keep independent copies of the following physical
 decomposition. Components are `(chain, logical block, bit in block, width)` in
 least-significant-piece-first order. Exact equality of component list, field
 class, direct-register projection and defect requirement is mandatory; a
@@ -431,7 +446,8 @@ All stage names and order below come directly from `PROFILE_SPECS`.
 7. `specimen-media-mig-to-defect-experimental`
    - `mig-system-pipe-to-defect`: `OPT_SYS_PIPE_DISABLE`.
    - `nvdec-to-defect`: `OPT_NVDEC_DISABLE`.
-   - `nvjpg-ofa-inseparable-pair`: both candidate pair bits together.
+   - `nvjpg-ofa-inseparable-pair`: both candidate pair bits as one logical
+     intent, emitted sequentially with every asymmetric prefix audited.
    - This models reported prerequisites; it does not prove MIG/media
      sufficiency.
 
@@ -460,7 +476,7 @@ All stage names and order below come directly from `PROFILE_SPECS`.
 
 The alias `specimen-hbm-to-defect-ceiling` resolves to `specimen-80gb-hbm`.
 
-### Six zero-operation review-only profiles
+### Twelve zero-operation review-only profiles
 
 - `review-ss0-iff`: IFF target `FEATURE_OVERRIDE_SM_SPEED_SELECT` at
   `0x0082381c`; reported words `0x082381fd, 0x88888888`, reported rows 484/485.
@@ -486,8 +502,28 @@ The alias `specimen-hbm-to-defect-ceiling` resolves to `specimen-80gb-hbm`.
 - `review-nvlink-per-link-unsupported`: the direct
   `OPT_PERLINK_DISABLE` width is twelve bits, but physical-coordinate certainty
   is 0%. Global bits 368–370 must not be substituted.
+- `review-reconfig-last-sm-ff`: reported Chain-1/block-26 word `0x00000681`
+  cleared a specimen-specific GPC RECONFIG pair and reportedly exposed four
+  SMs. Reported-coordinate certainty is 80%; portable-target certainty is 0%
+  because the affected GPC pair differs by card and no allocator exists.
+- `review-speed-select-ff`: reported Chain-2/block-78 word `0x00001382` and
+  block-79 word `0x2e0013c2` are inventoried at 75% coordinate and 50%
+  semantic confidence. Portable-target certainty is 0%; nonzero specimen words
+  are not a field encoder or cold validation.
+- `review-row-remapper-conventional`: proposed primary/redundant rows 48/49
+  bit 5 (`OPT_ROW_REMAPPER_EN`) are 60% coordinate / 20% sufficiency evidence.
+  Polarity, RIR, remap payload and isolated cold behavior are unresolved.
+- `review-vgx-conventional`: proposed rows 22/23 bit 19 (`OPT_VGX_EN`) are 60%
+  coordinate / 10% sufficiency evidence. Signed software, licensing and
+  firmware policy remain separate dependencies.
+- `review-opengl-conventional`: proposed rows 6/7 bit 18 (`OPT_OPENGL_EN`) are
+  60% coordinate / 10% sufficiency evidence. Polarity, RIR and the remaining
+  graphics/display policy are unresolved.
+- `review-ttu-conventional`: proposed rows 2/3 bit 21 are 55% coordinate / 10%
+  sufficiency evidence for a TTU/poison readout. Field identity, polarity,
+  safety consequences and redundant-sense behavior are unresolved.
 
-These six entries always have `operation_count=0`, no stages, and explicit
+These twelve entries always have `operation_count=0`, no stages, and explicit
 `compiler_eligible=false` / `runtime_eligible=false` metadata.
 
 ## Compiler/runtime safety boundary
@@ -577,7 +613,7 @@ compiler and backend and hashes a normalized contract containing:
 - non-executable IFF/conventional/unknown catalog entries.
 
 The test also requires every ID and stage token to occur in this document,
-asserts the 18/6/7 candidate/review/execution counts, checks compiler/runtime
+asserts the 24/12/7 candidate/review/execution counts, checks compiler/runtime
 parity, and proves the global NVLink candidate remains outside both execution
 allowlists. `tests/test_candidate_bundle.py` separately proves format
 round-trips, strict duplicate-key and one-record JSONL handling, text markers,
@@ -1818,7 +1854,7 @@ release/PR gate.
           ],
           "name": "nvjpg-ofa-inseparable-pair",
           "pcie_bits": [],
-          "purpose": "Clear both candidate bits as one atomic planning unit; the individual NVJPG-versus-OFA attribution remains unknown.",
+          "purpose": "Treat both candidate bits as one inseparable logical intent; hardware still receives sequential append operations with an unavoidable asymmetric prefix, and individual NVJPG-versus-OFA attribution remains unknown.",
           "raw_blocks": []
         }
       ]
@@ -2297,6 +2333,173 @@ release/PR gate.
         ]
       },
       "stages": []
+    },
+    {
+      "id": "review-reconfig-last-sm-ff",
+      "intent": "Inventory the reported per-specimen RECONFIG FF record for the last SMs without treating its GPC pair or word as portable.",
+      "model_type": "review-only-unsupported",
+      "review_only": {
+        "compiler_eligible": false,
+        "operation_count_required": 0,
+        "runtime_eligible": false,
+        "subjects": [
+          {
+            "blocker": "the affected GPC pair differs by card, the report is not independently reproduced, and no specimen-derived RECONFIG allocator exists",
+            "feature": "TPC RECONFIG / last SMs",
+            "plane": "FF",
+            "portable_target_certainty_percent": 0,
+            "reported_block": 26,
+            "reported_chain": 1,
+            "reported_coordinate_certainty_percent": 80,
+            "reported_effect": "one Allspark specimen cleared its GPC3/GPC4 RECONFIG pair and gained four SMs",
+            "reported_word": "0x00000681",
+            "source_revision": "darkmaniac7-cmp170hx-8gb-vfi-tools@f422f80:docs/FUSES.md:150-153,280"
+          }
+        ]
+      },
+      "stages": []
+    },
+    {
+      "id": "review-speed-select-ff",
+      "intent": "Inventory the reported FF speed-select records without turning specimen words into a portable throttle-unlock recipe.",
+      "model_type": "review-only-unsupported",
+      "review_only": {
+        "compiler_eligible": false,
+        "operation_count_required": 0,
+        "runtime_eligible": false,
+        "subjects": [
+          {
+            "blocker": "the values are community specimen records, include nonzero data, and lack an independently qualified field-to-FF encoder and cold-boot proof",
+            "feature": "scalar FP/integer speed selectors",
+            "plane": "FF",
+            "portable_target_certainty_percent": 0,
+            "reported_coordinate_certainty_percent": 75,
+            "reported_records": [
+              {
+                "block": 78,
+                "chain": 2,
+                "word": "0x00001382"
+              },
+              {
+                "block": 79,
+                "chain": 2,
+                "word": "0x2e0013c2"
+              }
+            ],
+            "reported_semantics_certainty_percent": 50,
+            "source_revision": "darkmaniac7-cmp170hx-8gb-vfi-tools@f422f80:docs/FUSES.md:281-282"
+          }
+        ]
+      },
+      "stages": []
+    },
+    {
+      "id": "review-row-remapper-conventional",
+      "intent": "Inventory the proposed conventional row-remapper enable pair without claiming an ECC or repair recipe.",
+      "model_type": "review-only-unsupported",
+      "review_only": {
+        "compiler_eligible": false,
+        "operation_count_required": 0,
+        "runtime_eligible": false,
+        "subjects": [
+          {
+            "bit": 5,
+            "blocker": "primary/redundant sense, RIR interaction, polarity, remap data and isolated cold validation are unresolved",
+            "coordinate_certainty_percent": 60,
+            "feature": "row remapper",
+            "feature_sufficiency_certainty_percent": 20,
+            "plane": "conventional-primary-redundant",
+            "reported_name": "OPT_ROW_REMAPPER_EN",
+            "rows": [
+              48,
+              49
+            ],
+            "source_revision": "darkmaniac7-cmp170hx-8gb-vfi-tools@f422f80:docs/FUSES.md:324"
+          }
+        ]
+      },
+      "stages": []
+    },
+    {
+      "id": "review-vgx-conventional",
+      "intent": "Inventory the proposed conventional VGX/vGPU enable pair without claiming license or firmware enablement.",
+      "model_type": "review-only-unsupported",
+      "review_only": {
+        "compiler_eligible": false,
+        "operation_count_required": 0,
+        "runtime_eligible": false,
+        "subjects": [
+          {
+            "bit": 19,
+            "blocker": "coordinate provenance is community-only and vGPU also depends on signed software, licensing and firmware policy",
+            "coordinate_certainty_percent": 60,
+            "feature": "VGX/vGPU",
+            "feature_sufficiency_certainty_percent": 10,
+            "plane": "conventional-primary-redundant",
+            "reported_name": "OPT_VGX_EN",
+            "rows": [
+              22,
+              23
+            ],
+            "source_revision": "darkmaniac7-cmp170hx-8gb-vfi-tools@f422f80:docs/FUSES.md:325"
+          }
+        ]
+      },
+      "stages": []
+    },
+    {
+      "id": "review-opengl-conventional",
+      "intent": "Inventory the proposed conventional OpenGL enable pair without claiming a complete graphics enablement path.",
+      "model_type": "review-only-unsupported",
+      "review_only": {
+        "compiler_eligible": false,
+        "operation_count_required": 0,
+        "runtime_eligible": false,
+        "subjects": [
+          {
+            "bit": 18,
+            "blocker": "polarity, sense/control behavior, RIR and the remaining display/graphics policy dependencies are unresolved",
+            "coordinate_certainty_percent": 60,
+            "feature": "OpenGL enable",
+            "feature_sufficiency_certainty_percent": 10,
+            "plane": "conventional-primary-redundant",
+            "reported_name": "OPT_OPENGL_EN",
+            "rows": [
+              6,
+              7
+            ],
+            "source_revision": "darkmaniac7-cmp170hx-8gb-vfi-tools@f422f80:docs/FUSES.md:326"
+          }
+        ]
+      },
+      "stages": []
+    },
+    {
+      "id": "review-ttu-conventional",
+      "intent": "Inventory the proposed TTU/poison conventional pair without equating one fuse with a safe poison-policy change.",
+      "model_type": "review-only-unsupported",
+      "review_only": {
+        "compiler_eligible": false,
+        "operation_count_required": 0,
+        "runtime_eligible": false,
+        "subjects": [
+          {
+            "bit": 21,
+            "blocker": "field identity, polarity, safety consequences, primary/redundant sense and isolated validation are unresolved",
+            "coordinate_certainty_percent": 55,
+            "feature": "TTU / poison feature readout",
+            "feature_sufficiency_certainty_percent": 10,
+            "plane": "conventional-primary-redundant",
+            "reported_effect": "FEATURE_READOUT bit 9 clear",
+            "rows": [
+              2,
+              3
+            ],
+            "source_revision": "darkmaniac7-cmp170hx-8gb-vfi-tools@f422f80:docs/FUSES.md:328"
+          }
+        ]
+      },
+      "stages": []
     }
   ],
   "runtime_field_policy": {
@@ -2768,10 +2971,11 @@ release/PR gate.
   },
   "schema": "170hx-xray-unlock-plan-doc-contract-v1",
   "versions": {
+    "backend": "1.1.0",
     "backend_id": "ga100-vfi-ff-append-v1",
-    "candidate": "0.5.0",
-    "compiler": "0.5.0",
-    "frontend": "4.3.0"
+    "candidate": "0.6.0",
+    "compiler": "0.6.0",
+    "frontend": "4.4.0"
   }
 }
 ```

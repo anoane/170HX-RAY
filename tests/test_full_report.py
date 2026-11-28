@@ -9,9 +9,11 @@ from collections import Counter
 import hashlib
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 from types import SimpleNamespace
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -202,6 +204,84 @@ class FullReportTests(unittest.TestCase):
             "name": "NVIDIA CMP 170HX", "run": run,
             "summary": summary, "coverage": coverage,
         }
+
+    def archbench_source_fixture(self, root, git_metadata=False):
+        project = Path(root) / "project"
+        source = project / "third_party" / "archbench"
+        docs = project / "docs"
+        (source / "src").mkdir(parents=True)
+        docs.mkdir()
+        bench = source / "bench"
+        bench.write_bytes(b"#!/bin/sh\nexit 0\n")
+        bench.chmod(0o755)
+        payload = source / "src" / "payload.txt"
+        payload.write_bytes(b"reviewed archbench fixture\n")
+        manifest_bytes = (
+            "100755 %s  bench\n100644 %s  src/payload.txt\n" %
+            (hashlib.sha256(bench.read_bytes()).hexdigest(),
+             hashlib.sha256(payload.read_bytes()).hexdigest())
+        ).encode("ascii")
+        manifest = docs / "ARCHBENCH_TRACKED_SHA256SUMS"
+        manifest.write_bytes(manifest_bytes)
+        url = "https://example.invalid/archbench.git"
+        commit = "1" * 40
+        tree = "2" * 40
+        if git_metadata:
+            subprocess.run(["git", "init", "-q"], cwd=str(source), check=True)
+            subprocess.run(["git", "add", "bench", "src/payload.txt"],
+                           cwd=str(source), check=True)
+            subprocess.run([
+                "git", "-c", "user.name=XRAY test",
+                "-c", "user.email=xray@example.invalid", "commit", "-qm",
+                "fixture",
+            ], cwd=str(source), check=True)
+            subprocess.run(["git", "remote", "add", "origin", url],
+                           cwd=str(source), check=True)
+            commit = subprocess.run(
+                ["git", "rev-parse", "HEAD"], cwd=str(source), check=True,
+                capture_output=True, text=True,
+            ).stdout.strip()
+            tree = subprocess.run(
+                ["git", "rev-parse", "HEAD^{tree}"], cwd=str(source),
+                check=True, capture_output=True, text=True,
+            ).stdout.strip()
+        lock = {
+            "schema": "170hx-xray-archbench-source-lock-v2",
+            "name": "ArchBench",
+            "version": "0.2.0",
+            "path": "third_party/archbench",
+            "url": url,
+            "commit": commit,
+            "tree": tree,
+            "license_expression": "AGPL-3.0-or-later",
+            "expected_tracked_files": 2,
+            "tracked_manifest": "docs/ARCHBENCH_TRACKED_SHA256SUMS",
+            "tracked_manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+            "validation": {},
+        }
+        lock_path = docs / "ARCHBENCH_SUBMODULE_LOCK.json"
+        lock_path.write_text(json.dumps(lock), encoding="utf-8")
+        return project, source, lock_path, manifest
+
+    def archbench_source_patches(self, project, source, lock, manifest):
+        lock_document = json.loads(lock.read_text(encoding="utf-8"))
+        reviewed = {
+            "version": lock_document["version"],
+            "url": lock_document["url"],
+            "commit": lock_document["commit"],
+            "tree": lock_document["tree"],
+            "tracked_files": lock_document["expected_tracked_files"],
+            "tracked_manifest_sha256": lock_document[
+                "tracked_manifest_sha256"
+            ],
+        }
+        return (
+            mock.patch.object(TOOL, "PROJECT_ROOT", project),
+            mock.patch.object(TOOL, "ARCHBENCH_SUBMODULE_ROOT", source),
+            mock.patch.object(TOOL, "ARCHBENCH_SUBMODULE_LOCK", lock),
+            mock.patch.object(TOOL, "ARCHBENCH_TRACKED_MANIFEST", manifest),
+            mock.patch.object(TOOL, "ARCHBENCH_REVIEWED_IDENTITY", reviewed),
+        )
 
     def diagnostics_power_document(self):
         query = {"argv": ["nvidia-smi"], "returncode": 0}
@@ -497,7 +577,7 @@ class FullReportTests(unittest.TestCase):
         )
         baseline_root = report / "candidate-baselines"
         baseline_root.mkdir()
-        manifests_root = report / "sealed-v2-manifests" / "manifests"
+        manifests_root = report / "sealed-v3-manifests" / "manifests"
         manifests_root.mkdir(parents=True)
         baseline_paths = {}
         manifest_paths = {}
@@ -749,6 +829,87 @@ class FullReportTests(unittest.TestCase):
         self.assertEqual(Path(parsed.archbench_root), expected)
         self.assertIsNone(parsed.archbench_binary)
 
+    def test_archbench_embedded_tree_is_manifest_bound_and_ignores_build_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project, source, lock, manifest = self.archbench_source_fixture(
+                directory
+            )
+            (source / "build" / "bin").mkdir(parents=True)
+            (source / "build" / "bin" / "archbench_sm80").write_bytes(
+                b"generated build output\n"
+            )
+            (source / "untracked-note.txt").write_text(
+                "not part of the reviewed tracked set\n", encoding="utf-8"
+            )
+            patches = self.archbench_source_patches(
+                project, source, lock, manifest
+            )
+            with patches[0], patches[1], patches[2], patches[3], patches[4]:
+                binding = TOOL.archbench_source_binding(source.resolve())
+            self.assertEqual(binding["kind"], "pinned-embedded-tree")
+            self.assertTrue(binding["pin_verified"])
+            self.assertFalse(binding["git_metadata_verified"])
+            self.assertEqual(binding["tracked_files"], 2)
+
+    def test_archbench_embedded_tree_rejects_tamper_missing_and_mode_drift(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project, source, lock, manifest = self.archbench_source_fixture(
+                directory
+            )
+            patches = self.archbench_source_patches(
+                project, source, lock, manifest
+            )
+            payload = source / "src" / "payload.txt"
+            original = payload.read_bytes()
+            payload.write_bytes(b"tampered\n")
+            with patches[0], patches[1], patches[2], patches[3], patches[4]:
+                with self.assertRaisesRegex(
+                        TOOL.ReportError, "tracked file digest mismatch"):
+                    TOOL.archbench_source_binding(source.resolve())
+            payload.write_bytes(original)
+            payload.unlink()
+            patches = self.archbench_source_patches(
+                project, source, lock, manifest
+            )
+            with patches[0], patches[1], patches[2], patches[3], patches[4]:
+                with self.assertRaisesRegex(
+                        TOOL.ReportError, "cannot open ArchBench tracked file"):
+                    TOOL.archbench_source_binding(source.resolve())
+            payload.write_bytes(original)
+            bench = source / "bench"
+            bench.chmod(0o644)
+            patches = self.archbench_source_patches(
+                project, source, lock, manifest
+            )
+            with patches[0], patches[1], patches[2], patches[3], patches[4]:
+                with self.assertRaisesRegex(
+                        TOOL.ReportError, "tracked file mode mismatch"):
+                    TOOL.archbench_source_binding(source.resolve())
+
+    def test_archbench_submodule_binds_git_commit_tree_url_and_manifest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project, source, lock, manifest = self.archbench_source_fixture(
+                directory, git_metadata=True
+            )
+            patches = self.archbench_source_patches(
+                project, source, lock, manifest
+            )
+            with patches[0], patches[1], patches[2], patches[3], patches[4]:
+                binding = TOOL.archbench_source_binding(source.resolve())
+            self.assertEqual(binding["kind"], "pinned-submodule")
+            self.assertTrue(binding["git_metadata_verified"])
+            subprocess.run([
+                "git", "remote", "set-url", "origin",
+                "https://example.invalid/wrong.git",
+            ], cwd=str(source), check=True)
+            patches = self.archbench_source_patches(
+                project, source, lock, manifest
+            )
+            with patches[0], patches[1], patches[2], patches[3], patches[4]:
+                with self.assertRaisesRegex(
+                        TOOL.ReportError, "origin URL"):
+                    TOOL.archbench_source_binding(source.resolve())
+
     def test_archbench_missing_submodule_and_worker_have_actionable_failures(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -856,8 +1017,8 @@ class FullReportTests(unittest.TestCase):
 
     def test_live_semantic_full_dump_auto_promotes_candidate_input(self):
         class BundleRunner(FakeRunner):
-            def run(inner_self, argv, cwd=None, timeout=None):
-                result = super(BundleRunner, inner_self).run(
+            def run(self, argv, cwd=None, timeout=None):
+                result = super().run(
                     argv, cwd=cwd, timeout=timeout
                 )
                 argv = [str(value) for value in argv]
@@ -1157,8 +1318,8 @@ class FullReportTests(unittest.TestCase):
 
     def test_glitch_product_coverage_is_scoped_and_fails_after_eligible_main(self):
         class GlitchBundleRunner(FakeRunner):
-            def run(inner_self, argv, cwd=None, timeout=None):
-                result = super(GlitchBundleRunner, inner_self).run(
+            def run(self, argv, cwd=None, timeout=None):
+                result = super().run(
                     argv, cwd=cwd, timeout=timeout
                 )
                 command = [str(value) for value in argv]
@@ -1230,15 +1391,17 @@ class FullReportTests(unittest.TestCase):
             self.assertEqual(ledger[1]["status"], "skipped")
 
     def test_candidate_rejects_wrong_selected_profile_inventory(self):
+        test_case = self
+
         class CandidateRunner(FakeRunner):
-            def run(inner_self, argv, cwd=None, timeout=None):
-                result = super(CandidateRunner, inner_self).run(
+            def run(self, argv, cwd=None, timeout=None):
+                result = super().run(
                     argv, cwd=cwd, timeout=timeout
                 )
                 command = [str(value) for value in argv]
                 if "--same-capture-context" in command:
                     destination = Path(command[command.index("--output") + 1])
-                    document = self.candidate_document()
+                    document = test_case.candidate_document()
                     document["cards"][0]["profiles"] = [
                         {"model_id": profile}
                         for profile in TOOL.CANDIDATE_PROFILES

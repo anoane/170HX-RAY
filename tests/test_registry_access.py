@@ -31,6 +31,19 @@ class RegistryAccessTests(unittest.TestCase):
         cls.kernel_text = KERNEL.read_text(encoding="utf-8")
         cls.uapi_text = UAPI.read_text(encoding="utf-8")
 
+    def test_cli_self_test_passes(self):
+        completed = subprocess.run(
+            [sys.executable, str(SCRIPT), "self-test", "--output", "-"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["status"], "PASS")
+        self.assertTrue(payload["checks"])
+        self.assertTrue(all(isinstance(item, str) for item in payload["checks"]))
+
     def test_read_target_identity_scope(self):
         self.assertEqual(
             self.xray.GA100_READ_TARGET_DEVICE_IDS,
@@ -97,15 +110,15 @@ class RegistryAccessTests(unittest.TestCase):
 
     def test_registry_metadata_census_is_explicit(self):
         census = self.xray.registry_provenance_census()
-        self.assertEqual(census["catalogued_unique_addresses"], 1093)
-        self.assertEqual(census["safe_unique_addresses"], 1068)
+        self.assertEqual(census["catalogued_unique_addresses"], 1109)
+        self.assertEqual(census["safe_unique_addresses"], 1084)
         self.assertEqual(census["stateful_or_unsafe_entries"], 25)
         # Three newly decoded records are still the same allowlisted reads:
         # the DP selector and the SS0/SS1 feature-override words.  Their exact
         # bit ranges are present in the pinned GA100 register descriptor, so
         # moving them from raw-word-only to decoded changes only this census.
         self.assertEqual(census["safe_with_fields"], 92)
-        self.assertEqual(census["safe_raw_word_only"], 976)
+        self.assertEqual(census["safe_raw_word_only"], 992)
         self.assertEqual(len(census["missing_interpretation_confidence"]), 463)
         self.assertEqual(census["missing_identity_confidence"], [])
         self.assertEqual(census["missing_source_anchor"], [])
@@ -122,6 +135,37 @@ class RegistryAccessTests(unittest.TestCase):
         self.assertFalse(census["completeness"]["safe_field_decode_complete"])
         self.assertFalse(census["completeness"]["planning_authority_complete"])
         self.assertFalse(census["direct_header_comparison"]["available"])
+
+    def test_latest_runtime_observations_are_read_only_and_raw(self):
+        expected = {
+            "MMU_LOCAL_MEMORY_RANGE": (0x00100CE0, "fuse-reference", "snapshot"),
+            "GFW_BOOT_PROGRESS": (0x00118234, "fuse-reference", "volatile"),
+            "FBPA_HBM_PLL_COEFF_MULTICAST": (0x0098BC98, "hbm-static", "volatile"),
+            "FBPA_CSTATUS_RAMAMOUNT_BROADCAST": (0x009A020C, "hbm-static", "snapshot"),
+            "FBPA_HBM_PLL_PRIV_LEVEL_MASK": (0x009A3C7C, "hbm-static", "snapshot"),
+            "GSP_RISCV_STATUS": (0x00111240, "hbm-static", "volatile"),
+            "FB_STOP_OUTPUT": (0x0010A7C0, "hbm-static", "volatile"),
+            "FB_STOP_INPUT": (0x0010A7C4, "hbm-static", "volatile"),
+            "PMU_IDLE_THRESHOLD": (0x0010BE00, "hbm-static", "volatile"),
+            "PMU_IDLE_MASK0": (0x0010BE40, "hbm-static", "volatile"),
+            "PMU_IDLE_MASK1": (0x0010BE80, "hbm-static", "volatile"),
+            "PMU_IDLE_MASK2": (0x0010BEC0, "hbm-static", "volatile"),
+            "PMU_IDLE_COUNT": (0x0010BF80, "hbm-static", "volatile"),
+            "PMU_IDLE_CONTROL": (0x0010BFC0, "hbm-static", "volatile"),
+            "HBM_PLL_CFG_MC2": (0x0098BC90, "hbm-static", "volatile"),
+            "PRI_FENCE": (0x001211FC, "hbm-static", "volatile"),
+        }
+        for name, (address, profile, stability) in expected.items():
+            with self.subTest(name=name):
+                register = self.xray.REGISTER_BY_NAME[name]
+                self.assertEqual(register["address"], address)
+                self.assertEqual(register["profile"], profile)
+                self.assertEqual(register["stability"], stability)
+                self.assertEqual(register["fields"], [])
+                self.assertTrue(register["capture_safe"])
+                self.assertEqual(register["access_effect"], "pure_read")
+                self.assertFalse(register["planning_allowed"])
+                self.assertIn(address, self.xray.SAFE_READ_OFFSETS)
 
     def test_nvlink_widths_and_nvenc_inventory_registers_are_exact(self):
         expected = {
@@ -267,6 +311,9 @@ class RegistryAccessTests(unittest.TestCase):
         )
         self.assertEqual(self.xray.canonical_access_mode("read-write"), "volatile-write")
         self.assertEqual(self.xray.canonical_access_mode("full-write"), "otp-write")
+        source = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("170hx-xray-otp-sealed-manifest-v3", source)
+        self.assertIn("sealed-manifest-v2 is retired", source)
         self.assertEqual(self.xray.XRAY_HELPER_ABI, 6)
         self.assertEqual(self.xray.XRAY_IOC_INFO, 0x85A05801)
         self.assertEqual(self.xray.XRAY_IOC_READ32, 0xC0305802)

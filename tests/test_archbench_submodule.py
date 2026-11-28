@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 Fabiano Anemone <fabiano.anemone@gmail.com>
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Lock the ArchBench submodule URL, gitlink, version, and license boundary."""
+"""Lock ArchBench content plus the public submodule transport boundary."""
 
 import configparser
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -13,8 +14,8 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 PATH = "third_party/archbench_cuda13_5_v0_2_0"
 URL = "https://github.com/anoane/archbench.git"
-COMMIT = "e0852fa34933c605fca780180d23c13af2927265"
-TREE = "acc45376cb9c6c5faa85333da0aa6365d94dc7c1"
+COMMIT = "6209b36e3c40a5a964842194c4851bdcdf79bcff"
+TREE = "d7150409058f37c18b9a7fde2677b73ae817fc73"
 
 
 class ArchBenchSubmoduleTests(unittest.TestCase):
@@ -27,7 +28,9 @@ class ArchBenchSubmoduleTests(unittest.TestCase):
 
     def test_metadata_and_gitmodules_are_exact(self):
         lock = self.lock()
-        self.assertEqual(lock["schema"], "170hx-xray-submodule-lock-v1")
+        self.assertEqual(
+            lock["schema"], "170hx-xray-archbench-source-lock-v2"
+        )
         self.assertEqual(lock["name"], "ArchBench")
         self.assertEqual(lock["version"], "0.2.0")
         self.assertEqual(lock["path"], PATH)
@@ -36,22 +39,33 @@ class ArchBenchSubmoduleTests(unittest.TestCase):
         self.assertEqual(lock["tree"], TREE)
         self.assertEqual(lock["license_expression"], "AGPL-3.0-or-later")
         self.assertEqual(lock["expected_tracked_files"], 104)
+        self.assertEqual(
+            lock["tracked_manifest"], "docs/ARCHBENCH_TRACKED_SHA256SUMS"
+        )
+        manifest = ROOT / lock["tracked_manifest"]
+        self.assertEqual(
+            hashlib.sha256(manifest.read_bytes()).hexdigest(),
+            lock["tracked_manifest_sha256"],
+        )
+        self.assertEqual(len(manifest.read_text(encoding="ascii").splitlines()), 104)
         self.assertEqual(lock["validation"], {
             "host_tests": "134/134 passed",
             "independent_alu_transitions": 532480,
             "cuda_disabled_ctest": "3/3 passed",
         })
 
-        parser = configparser.ConfigParser()
-        parser.read(ROOT / ".gitmodules", encoding="utf-8")
-        section = 'submodule "%s"' % PATH
-        self.assertEqual(parser.get(section, "path"), PATH)
-        self.assertEqual(parser.get(section, "url"), URL)
-        self.assertFalse(parser.has_option(section, "branch"))
+        gitmodules = ROOT / ".gitmodules"
+        if gitmodules.is_file():
+            parser = configparser.ConfigParser()
+            parser.read(gitmodules, encoding="utf-8")
+            section = 'submodule "%s"' % PATH
+            self.assertEqual(parser.get(section, "path"), PATH)
+            self.assertEqual(parser.get(section, "url"), URL)
+            self.assertFalse(parser.has_option(section, "branch"))
 
     def test_parent_gitlink_matches_lock_when_git_metadata_is_available(self):
-        if not (ROOT / ".git").exists():
-            self.skipTest("parent Git metadata is unavailable")
+        if not (ROOT / ".git").exists() or not (ROOT / ".gitmodules").is_file():
+            self.skipTest("parent gitlink metadata is unavailable in this edition")
         completed = subprocess.run(
             ["git", "ls-files", "-s", "--", PATH], cwd=str(ROOT),
             check=True, capture_output=True, text=True,
@@ -64,11 +78,18 @@ class ArchBenchSubmoduleTests(unittest.TestCase):
     def test_initialized_submodule_matches_commit_and_tree(self):
         submodule = ROOT / PATH
         if not (submodule / ".git").exists():
-            if (submodule / "bench").exists():
-                self.fail(
-                    "ArchBench source exists without verifiable submodule metadata"
-                )
-            self.skipTest("ArchBench submodule is not initialized")
+            if not (submodule / "bench").exists():
+                self.skipTest("ArchBench source is not initialized")
+            lock = self.lock()
+            manifest = ROOT / lock["tracked_manifest"]
+            for line in manifest.read_text(encoding="ascii").splitlines():
+                mode, expected, relative = line.split(" ", 2)
+                self.assertIn(mode, ("100644", "100755"))
+                path = submodule / relative.lstrip()
+                self.assertTrue(path.is_file(), relative)
+                self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), expected)
+                self.assertEqual(bool(path.stat().st_mode & 0o111), mode == "100755")
+            return
         head = subprocess.run(
             ["git", "rev-parse", "HEAD"], cwd=str(submodule), check=True,
             capture_output=True, text=True,
@@ -77,8 +98,13 @@ class ArchBenchSubmoduleTests(unittest.TestCase):
             ["git", "rev-parse", "HEAD^{tree}"], cwd=str(submodule),
             check=True, capture_output=True, text=True,
         ).stdout.strip()
+        url = subprocess.run(
+            ["git", "config", "--get", "remote.origin.url"],
+            cwd=str(submodule), check=True, capture_output=True, text=True,
+        ).stdout.strip()
         self.assertEqual(head, COMMIT)
         self.assertEqual(tree, TREE)
+        self.assertEqual(url, URL)
 
         tracked = subprocess.run(
             ["git", "ls-files", "-z"], cwd=str(submodule), check=True,

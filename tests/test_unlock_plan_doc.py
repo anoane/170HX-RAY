@@ -60,6 +60,7 @@ def planning_contract():
             "candidate": candidate.SCRIPT_VERSION,
             "compiler": compiler.TOOL_VERSION,
             "backend_id": backend.BACKEND_ID,
+            "backend": backend.BACKEND_VERSION,
         },
         "goal_ids": sorted(frontend.GOALS),
         "planning_models": frontend.PLANNING_MODELS,
@@ -156,8 +157,8 @@ class UnlockPlanDocumentationTests(unittest.TestCase):
             profile_id for profile_id, profile in profiles.items()
             if profile.get("review_only")
         }
-        self.assertEqual(len(profiles), 18)
-        self.assertEqual(len(review), 6)
+        self.assertEqual(len(profiles), 24)
+        self.assertEqual(len(review), 12)
         self.assertEqual(len(contract["compiler_profiles"]), 7)
         self.assertTrue(review.isdisjoint(contract["compiler_profiles"]))
         self.assertTrue(review.isdisjoint(contract["runtime_profiles"]))

@@ -30,7 +30,7 @@ import sys
 
 
 SCHEMA = "170hx-xray-candidate-plan-v1"
-SCRIPT_VERSION = "0.5.0"
+SCRIPT_VERSION = "0.6.0"
 LEGACY_CAPTURE_SCHEMA = "170hx-ray-v1"
 LEGACY_PUBLIC_AUDIT_SCHEMA = "170hx-ray-public-plan-audit-v1"
 LEGACY_PUBLIC_AUDIT_TOOL_SHA256 = (
@@ -715,8 +715,10 @@ PROFILE_SPECS = [
                 "nvjpg-ofa-inseparable-pair",
                 MEDIA_PAIR_FIELDS,
                 purpose=(
-                    "Clear both candidate bits as one atomic planning unit; the "
-                    "individual NVJPG-versus-OFA attribution remains unknown."
+                    "Treat both candidate bits as one inseparable logical intent; "
+                    "hardware still receives sequential append operations with an "
+                    "unavoidable asymmetric prefix, and individual NVJPG-versus-"
+                    "OFA attribution remains unknown."
                 ),
             ),
         ],
@@ -860,6 +862,99 @@ PROFILE_SPECS = [
             "physical_coordinate_certainty_percent": 0,
             "global_group_candidate": "Chain-1 bits 368..370 are not this field",
             "blocker": "physical coordinate, board routing, ROM/GSP policy and link training are unresolved",
+        }],
+    ),
+    review_only_profile(
+        "review-reconfig-last-sm-ff",
+        "Inventory the reported per-specimen RECONFIG FF record for the last SMs without treating its GPC pair or word as portable.",
+        [{
+            "feature": "TPC RECONFIG / last SMs",
+            "plane": "FF",
+            "reported_chain": 1,
+            "reported_block": 26,
+            "reported_word": "0x00000681",
+            "reported_effect": "one Allspark specimen cleared its GPC3/GPC4 RECONFIG pair and gained four SMs",
+            "source_revision": "darkmaniac7-cmp170hx-8gb-vfi-tools@f422f80:docs/FUSES.md:150-153,280",
+            "reported_coordinate_certainty_percent": 80,
+            "portable_target_certainty_percent": 0,
+            "blocker": "the affected GPC pair differs by card, the report is not independently reproduced, and no specimen-derived RECONFIG allocator exists",
+        }],
+    ),
+    review_only_profile(
+        "review-speed-select-ff",
+        "Inventory the reported FF speed-select records without turning specimen words into a portable throttle-unlock recipe.",
+        [{
+            "feature": "scalar FP/integer speed selectors",
+            "plane": "FF",
+            "reported_records": [
+                {"chain": 2, "block": 78, "word": "0x00001382"},
+                {"chain": 2, "block": 79, "word": "0x2e0013c2"},
+            ],
+            "source_revision": "darkmaniac7-cmp170hx-8gb-vfi-tools@f422f80:docs/FUSES.md:281-282",
+            "reported_coordinate_certainty_percent": 75,
+            "reported_semantics_certainty_percent": 50,
+            "portable_target_certainty_percent": 0,
+            "blocker": "the values are community specimen records, include nonzero data, and lack an independently qualified field-to-FF encoder and cold-boot proof",
+        }],
+    ),
+    review_only_profile(
+        "review-row-remapper-conventional",
+        "Inventory the proposed conventional row-remapper enable pair without claiming an ECC or repair recipe.",
+        [{
+            "feature": "row remapper",
+            "plane": "conventional-primary-redundant",
+            "rows": [48, 49],
+            "bit": 5,
+            "reported_name": "OPT_ROW_REMAPPER_EN",
+            "source_revision": "darkmaniac7-cmp170hx-8gb-vfi-tools@f422f80:docs/FUSES.md:324",
+            "coordinate_certainty_percent": 60,
+            "feature_sufficiency_certainty_percent": 20,
+            "blocker": "primary/redundant sense, RIR interaction, polarity, remap data and isolated cold validation are unresolved",
+        }],
+    ),
+    review_only_profile(
+        "review-vgx-conventional",
+        "Inventory the proposed conventional VGX/vGPU enable pair without claiming license or firmware enablement.",
+        [{
+            "feature": "VGX/vGPU",
+            "plane": "conventional-primary-redundant",
+            "rows": [22, 23],
+            "bit": 19,
+            "reported_name": "OPT_VGX_EN",
+            "source_revision": "darkmaniac7-cmp170hx-8gb-vfi-tools@f422f80:docs/FUSES.md:325",
+            "coordinate_certainty_percent": 60,
+            "feature_sufficiency_certainty_percent": 10,
+            "blocker": "coordinate provenance is community-only and vGPU also depends on signed software, licensing and firmware policy",
+        }],
+    ),
+    review_only_profile(
+        "review-opengl-conventional",
+        "Inventory the proposed conventional OpenGL enable pair without claiming a complete graphics enablement path.",
+        [{
+            "feature": "OpenGL enable",
+            "plane": "conventional-primary-redundant",
+            "rows": [6, 7],
+            "bit": 18,
+            "reported_name": "OPT_OPENGL_EN",
+            "source_revision": "darkmaniac7-cmp170hx-8gb-vfi-tools@f422f80:docs/FUSES.md:326",
+            "coordinate_certainty_percent": 60,
+            "feature_sufficiency_certainty_percent": 10,
+            "blocker": "polarity, sense/control behavior, RIR and the remaining display/graphics policy dependencies are unresolved",
+        }],
+    ),
+    review_only_profile(
+        "review-ttu-conventional",
+        "Inventory the proposed TTU/poison conventional pair without equating one fuse with a safe poison-policy change.",
+        [{
+            "feature": "TTU / poison feature readout",
+            "plane": "conventional-primary-redundant",
+            "rows": [2, 3],
+            "bit": 21,
+            "reported_effect": "FEATURE_READOUT bit 9 clear",
+            "source_revision": "darkmaniac7-cmp170hx-8gb-vfi-tools@f422f80:docs/FUSES.md:328",
+            "coordinate_certainty_percent": 55,
+            "feature_sufficiency_certainty_percent": 10,
+            "blocker": "field identity, polarity, safety consequences, primary/redundant sense and isolated validation are unresolved",
         }],
     ),
 ]
@@ -2120,6 +2215,12 @@ def build_operations(profile, baseline_state, live_card, first_row, boundary,
 
         for key in sorted(touched):
             chain, block = key
+            if key not in baseline_state:
+                raise PlanFailure(
+                    "%s would change chain %d block %d without a prior effective "
+                    "FF record; zero is not evidence for unknown co-resident bits"
+                    % (profile["id"], chain, block)
+                )
             old = before_stage.get(key, baseline_state.get(key, 0))
             # If another touched key was emitted first, it does not affect this key.
             new = state[key]
@@ -2375,6 +2476,9 @@ def validation_lifecycle(profile):
     if pcie_selected:
         feature_checks.extend([
             "cold-enumerate endpoint and root-port link capabilities before retraining",
+            "if using the experimental runtime ladder, request Gen3 at both ends, "
+            "prove 8 GT/s at both ends, replay E1/equalization, then request the "
+            "target at both ends; LINK_CONFIG[19:18] is reverse encoded",
             "validate negotiated width/speed, AER/Xid counters and sustained bidirectional transfers",
         ])
     if fields.intersection(set(IDENTITY_FIELDS)):
@@ -2918,6 +3022,32 @@ def dual_path_plan_models(projection, profiles):
             "16-GT/s x16 must be measured under transfer load, not inferred from fuses",
             "AER/Xid/error-rate comparison against the pre-change baseline",
         ],
+        "experimental_runtime_ladder": {
+            "source_revision": (
+                "sayhellotojungle/cmpunlocker@test-gen4-rootport-ladder@"
+                "91a7b060:driver/dynfb/hooks/nv_gen4.c:3-74"
+            ),
+            "authority": (
+                "runtime bring-up evidence only; it adds no fuse coordinate "
+                "and is not part of the OTP target"
+            ),
+            "encoding": (
+                "endpoint LINK_CONFIG[19:18] is reverse encoded "
+                "(0=Gen4..3=Gen1); PCIe LNKCTL2 uses forward encoding"
+            ),
+            "sequence": [
+                "request Gen3 on endpoint and upstream root port",
+                "require both ends to hold 8 GT/s",
+                "replay E1/equalization with A100-like PHY initialization",
+                "request the final target on endpoint and root port",
+                "measure both ends and fall back without changing fuse intent",
+            ],
+            "unresolved": [
+                "experimental branch, not default upstream",
+                "board signal integrity and root-port policy remain host-specific",
+                "success does not prove the permanent fuse recipe",
+            ],
+        },
         "not_sufficient_by_itself": [
             "board capacitor mode and signal integrity",
             "DevInit/PHY lane configuration", "root-port policy", "link retraining",

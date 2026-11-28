@@ -1,12 +1,31 @@
 # 170HX-XRAY release validation — 2026-11-26
 
-This ledger records the current 4.3.0 source admission and references the
-accepted 4.2.0 demonstration report as private immutable historical evidence. It
+This is a **historical 2026-11-26 source-release ledger**. It records the
+then-current 4.3.0 source admission and references the accepted 4.2.0
+demonstration report as private immutable historical evidence. It
 distinguishes passes, bounded warnings, pending external scans, and actions
 that were deliberately not executed. A source hash proves byte identity; it
 does not prove that an irreversible fuse plan is electrically safe.
 
-## Pre-submodule 4.3.0 runtime matrix
+The counts, hashes, clone results and private-report references below must not
+be read as validation of the later 2026-11-28 source.
+
+## 2026-11-28 current-source pointer
+
+The source now identifies frontend **4.4.0**, kernel helper **4.2.0**,
+compiler and candidate planner **0.6.0**, runtime backend **1.1.0**, and
+packager **0.6.0** with **bundle schema v2**. The separate irreversible
+artifact is now **sealed manifest v3**; bundle schema v2 does not make a v2 OTP
+manifest current. The planner inventory is 24 profiles: 12 operational/offline
+and 12 zero-operation review-only profiles. Exactly seven profile classes
+remain compiler/runtime executable.
+
+The private demonstration report remains historical evidence and is still not
+redistributed by this source-only edition. Exact current-source commands,
+results, skips and qualifications are recorded separately by the final
+2026-11-28 validation pass.
+
+## Historical pre-submodule 4.3.0 runtime matrix
 
 | Surface | Python 3.9 (Docker) | Python 3.14.8 | Python 3.15.2 |
 |---|---:|---:|---:|
@@ -14,7 +33,7 @@ does not prove that an irreversible fuse plan is electrically safe.
 | Sanitized edition | 308/308 pass | 308/308 pass | 308/308 pass |
 
 All runs used `PYTHONDONTWRITEBYTECODE=1`. The sanitized extra test enforces
-the provenance boundary. The current plan-document test parses the generated
+the provenance boundary. The then-current plan-document test parsed the generated
 canonical appendix and requires exact equality with the frontend, candidate,
 compiler and independent runtime contracts; it no longer relies only on token
 presence plus a digest. `git diff --check` passes for the research worktree.
@@ -25,7 +44,7 @@ initialized public tree passed all 326 discovered tests with one intentional
 skip for raw third-party source fixtures that are not redistributed. Their
 hashes and provenance remain bound by `evidence/public/public-source-lineage.json`,
 and the first-party public-plan audit is still exercised. Deterministic parser,
-planner and VFI state-machine coverage remains active.
+planner and VFI state-machine coverage was exercised.
 
 Two source-release clone gates were then run at
 `b313530c716679c08c1fe22f38786ee8c7020bd3`. A clean recursive clone passed all
@@ -49,7 +68,7 @@ verified all 28 admitted same-baseline sibling manifests (four cards times seven
 profiles). The route layer emitted both final-state models, eight per-card
 statuses and four semantically equal transports for each route and the route
 index. Because the input was offline retained evidence, every route was marked
-historical review-only and exposed zero authoritative current manifests.
+historical review-only and exposed zero authoritative live manifests.
 Full-report 0.7 explicitly supports only initial `000-baseline` packaging; the
 epoch-001/002 transitions remain forecasts, not implemented promotion logic.
 This was non-authorizing validation: no benchmark, power setter, live capture,
@@ -68,11 +87,11 @@ journals and source-tool hashes were independently rechecked after transfer.
 The report binds full-report source SHA-256
 `77f07bf46bca87c578df1af75c5bd1966665ef97e90b20039355396f5e0fca28`;
 its supplied historical capture is classified by explicit provenance rather
-than timestamp and yields zero authoritative current manifests.
+than timestamp and yielded zero authoritative live manifests.
 
-## Current addendum (supersedes historical toolchain blockers)
+## Historical 4.3.0 toolchain addendum
 
-The current source has completed the formerly unavailable Ruff, Pylint,
+The then-current 4.3.0 source completed the formerly unavailable Ruff, Pylint,
 Bandit, and Semgrep passes. The former Clang Kbuild flag conflict and the 780
 Linux-format differences are also resolved. Exact versions, commands,
 bounded findings, the clean LLVM/GCC/Sparse/clang-tidy gates, and byte-level
@@ -95,9 +114,11 @@ Additional Python checks:
 - Mypy passed for all 11 selected operational files in each edition with zero
   findings.
 - Every command-line `--help` entry point returned zero.
-- Offline self-test and registry audit passed in both editions.
+- After correcting stale expected profile/census counts exposed by the final
+  NVENC registry additions, the offline self-test and registry audit passed;
+  the discovered test suite now invokes the CLI self-test as a regression gate.
 - The four new public-model regressions passed in both editions. They bind the
-  current poison-first/opt-in classifier model, the inter-shot cooldown, the
+  then-current poison-first/opt-in classifier model, the inter-shot cooldown, the
   exact-but-non-executable SS0/SS1 IFF candidates, and the non-executable
   conventional DP/ECC candidates.
 
@@ -159,7 +180,7 @@ sample count, failures, interval, and command provenance.
 - Result: `completed`; all four selected cards restored to 150 W and
   persistence mode; no Xid, kernel BUG, or kernel WARNING was observed.
 
-This result is evidence for the tested current `20c2` state. It is not proof
+This result is evidence for the then-tested `20c2` state. It is not proof
 of post-conversion, held-glitch, MIG-isolation, ECC-correction, or permanently
 unlocked media behavior.
 

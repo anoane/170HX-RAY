@@ -328,6 +328,98 @@ class DecoderHardeningTests(unittest.TestCase):
         )
         self.assertEqual(result["state"], "incomplete_or_inconsistent")
 
+    def test_normalized_topology_rejects_unsupported_capacity_classes(self):
+        def reading(value):
+            return {"status": "ok", "raw": "0x%08x" % value}
+
+        def expand(mask):
+            return sum(
+                (3 << (2 * bit)) for bit in range(12)
+                if mask & (1 << bit)
+            )
+
+        def fixture(defect_fbp):
+            defect_subpartitions = expand(defect_fbp)
+            values = {
+                "GPC_DEFECTIVE": 0, "OPT_GPC_DISABLE": 0,
+                "STATUS_OPT_GPC": 0,
+                "PES_DEFECTIVE": 0, "OPT_PES_DISABLE": 0,
+                "FBP_DEFECTIVE": defect_fbp,
+                "OPT_FBP_DISABLE": defect_fbp,
+                "STATUS_OPT_FBP": defect_fbp,
+                "FBPA_DEFECTIVE": defect_subpartitions,
+                "OPT_FBPA_DISABLE": defect_subpartitions,
+                "STATUS_OPT_FBPA": defect_subpartitions,
+                "FBIO_DEFECTIVE": defect_subpartitions,
+                "OPT_FBIO_DISABLE": defect_subpartitions,
+                "STATUS_OPT_FBIO": defect_subpartitions,
+                "ROP_L2_DEFECTIVE": defect_subpartitions,
+                "OPT_ROP_L2_DISABLE": defect_subpartitions,
+                "OPT_HALF_FBPA_ENABLE": 0,
+                "CTRL_OPT_HALF_FBPA": 0,
+                "STATUS_HALF_FBPA": 0,
+            }
+            for gpc in range(self.xray.GA100_GPC_COUNT):
+                values.update({
+                    "TPC_GPC%d_DEFECTIVE" % gpc: 0,
+                    "OPT_TPC_GPC%d_DISABLE" % gpc: 0,
+                    "STATUS_OPT_TPC_GPC%d" % gpc: 0,
+                    "STATUS_OPT_PES_GPC[%d]" % gpc: 0,
+                    "OPT_TPC_GPC%d_RECONFIG" % gpc: 0,
+                    "RECONFIG_OVERRIDE_TPC_GPC%d" % gpc: 0,
+                    "CTRL_OPT_TPC_GPC%d" % gpc: 0,
+                    "DISABLE_EXTEND_TPC_GPC%d" % gpc: 0,
+                })
+            return {name: reading(value) for name, value in values.items()}
+
+        density = {"qualified": True, "gib_per_subpartition": 4}
+        for defect, capacity in ((0x00F, 64), (0x003, 80), (0x000, 96)):
+            result = self.xray.normalize_ga100_topology(
+                fixture(defect), 4, density
+            )
+            self.assertTrue(result["memory"]["target_admissible"])
+            self.assertEqual(
+                result["memory"]["layers"]["defect"]["capacity_gib"],
+                capacity,
+            )
+            self.assertEqual(
+                result["memory"]["supported_exact_subpartition_counts"],
+                [16, 20, 24],
+            )
+            self.assertEqual(
+                result["memory"]["supported_exact_capacity_classes_gib"],
+                [64, 80, 96],
+            )
+
+        for defect, diagnostic_capacity in ((0x007, 72), (0x001, 88)):
+            result = self.xray.normalize_ga100_topology(
+                fixture(defect), 4, density
+            )
+            self.assertEqual(
+                result["memory"]["layers"]["defect"]["capacity_gib"],
+                diagnostic_capacity,
+            )
+            self.assertFalse(result["memory"]["target_admissible"])
+            self.assertEqual(result["state"], "incomplete_or_inconsistent")
+            self.assertTrue(any(
+                "supported exact capacity classes require 16, 20 or 24"
+                in violation
+                for violation in result["memory"]["invariant_violations"]
+            ))
+
+        scaled_density = {"qualified": True, "gib_per_subpartition": 5}
+        scaled = self.xray.normalize_ga100_topology(
+            fixture(0x003), 5, scaled_density
+        )
+        self.assertTrue(scaled["memory"]["target_admissible"])
+        self.assertEqual(
+            scaled["memory"]["layers"]["defect"]["capacity_gib"], 100
+        )
+        self.assertEqual(
+            scaled["memory"]["supported_exact_capacity_classes_gib"],
+            [80, 100, 120],
+        )
+
     def test_compute_ceiling_gates_tpcs_by_gpc_layer(self):
         def reading(value):
             return {"status": "ok", "raw": "0x%08x" % value}

@@ -1,13 +1,15 @@
 {
-  "schema": "170hx-xray-submodule-lock-v1",
+  "schema": "170hx-xray-archbench-source-lock-v2",
   "name": "ArchBench",
   "version": "0.2.0",
   "path": "third_party/archbench_cuda13_5_v0_2_0",
   "url": "https://github.com/anoane/archbench.git",
-  "commit": "e0852fa34933c605fca780180d23c13af2927265",
-  "tree": "acc45376cb9c6c5faa85333da0aa6365d94dc7c1",
+  "commit": "6209b36e3c40a5a964842194c4851bdcdf79bcff",
+  "tree": "d7150409058f37c18b9a7fde2677b73ae817fc73",
   "license_expression": "AGPL-3.0-or-later",
   "expected_tracked_files": 104,
+  "tracked_manifest": "docs/ARCHBENCH_TRACKED_SHA256SUMS",
+  "tracked_manifest_sha256": "f018760a12b15c6b97d7abd6198b453f98f930bed076b4b610c2b8da1c41b129",
   "validation": {
     "host_tests": "134/134 passed",
     "independent_alu_transitions": 532480,

@@ -27,7 +27,7 @@ import subprocess
 import sys
 
 
-VERSION = "0.7.0"
+VERSION = "0.8.0"
 SCHEMA = "170hx-xray-full-report-v1"
 REPORT_MODES = ("report", "report+bench")
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -35,6 +35,19 @@ ARCHBENCH_SUBMODULE_ROOT = (
     PROJECT_ROOT / "third_party" / "archbench_cuda13_5_v0_2_0"
 )
 ARCHBENCH_SUBMODULE_LOCK = PROJECT_ROOT / "docs" / "ARCHBENCH_SUBMODULE_LOCK.json"
+ARCHBENCH_TRACKED_MANIFEST = (
+    PROJECT_ROOT / "docs" / "ARCHBENCH_TRACKED_SHA256SUMS"
+)
+ARCHBENCH_REVIEWED_IDENTITY = {
+    "version": "0.2.0",
+    "url": "https://github.com/anoane/archbench.git",
+    "commit": "6209b36e3c40a5a964842194c4851bdcdf79bcff",
+    "tree": "d7150409058f37c18b9a7fde2677b73ae817fc73",
+    "tracked_files": 104,
+    "tracked_manifest_sha256": (
+        "f018760a12b15c6b97d7abd6198b453f98f930bed076b4b610c2b8da1c41b129"
+    ),
+}
 BENCHMARK_ONLY_OPTIONS = frozenset((
     "--benchmarks", "--set-power-limit", "--power-limit-watts",
     "--power-sample-interval-ms", "--bandwidth-bytes",
@@ -197,6 +210,12 @@ CANDIDATE_PROFILES = (
     "review-ecc-conventional",
     "review-nvenc-unsupported",
     "review-nvlink-per-link-unsupported",
+    "review-reconfig-last-sm-ff",
+    "review-speed-select-ff",
+    "review-row-remapper-conventional",
+    "review-vgx-conventional",
+    "review-opengl-conventional",
+    "review-ttu-conventional",
 )
 CANDIDATE_PROFILE_COUNT = len(CANDIDATE_PROFILES)
 CANDIDATE_PROVENANCE_NONE = "none"
@@ -2891,7 +2910,7 @@ def compile_candidate_manifests(project, output, runner, candidate_path,
                                 bdfs, ledger, timeout):
     logs = create_dir(output / "manifest-command")
     baselines = create_dir(output / "candidate-baselines")
-    manifest_set = create_dir(output / "sealed-v2-manifests")
+    manifest_set = create_dir(output / "sealed-v3-manifests")
     manifests = create_dir(manifest_set / "manifests")
     candidate = strict_json(candidate_path)
     cards = candidate.get("cards")
@@ -4183,31 +4202,190 @@ def uuid_map(runner, smi):
     return result, mapping
 
 
+_ARCHBENCH_MANIFEST_LINE = re.compile(
+    r"^(100644|100755) ([0-9a-f]{64})  ([^\x00\r\n]+)$"
+)
+
+
+def _archbench_regular_digest(path):
+    """Hash one regular file without following its final symlink."""
+    flags = os.O_RDONLY
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        fd = os.open(str(path), flags)
+    except OSError as exc:
+        raise ReportError("cannot open ArchBench tracked file %s: %s" %
+                          (path, exc)) from exc
+    try:
+        before = os.fstat(fd)
+        if not stat.S_ISREG(before.st_mode):
+            raise ReportError("ArchBench tracked path is not a regular file: %s" % path)
+        digest = hashlib.sha256()
+        while True:
+            block = os.read(fd, 1024 * 1024)
+            if not block:
+                break
+            digest.update(block)
+        after = os.fstat(fd)
+        identity = lambda value: (
+            value.st_dev, value.st_ino, value.st_size,
+            getattr(value, "st_mtime_ns", int(value.st_mtime * 1000000000)),
+            getattr(value, "st_ctime_ns", int(value.st_ctime * 1000000000)),
+        )
+        if identity(before) != identity(after):
+            raise ReportError("ArchBench tracked file changed while hashing: %s" % path)
+        return digest.hexdigest(), after.st_mode
+    finally:
+        os.close(fd)
+
+
+def _archbench_manifest(lock):
+    """Load the canonical mode/content manifest bound by the JSON lock."""
+    required = {
+        "schema", "name", "version", "path", "url", "commit", "tree",
+        "license_expression", "expected_tracked_files", "tracked_manifest",
+        "tracked_manifest_sha256", "validation",
+    }
+    if not isinstance(lock, dict) or set(lock) != required:
+        raise ReportError("ArchBench source lock field set differs from policy")
+    reviewed = ARCHBENCH_REVIEWED_IDENTITY
+    if (lock["schema"] != "170hx-xray-archbench-source-lock-v2" or
+            lock["name"] != "ArchBench" or
+            lock["version"] != reviewed["version"] or
+            lock["license_expression"] != "AGPL-3.0-or-later" or
+            lock["url"] != reviewed["url"] or
+            not isinstance(lock["commit"], str) or
+            not re.fullmatch(r"[0-9a-f]{40}", lock["commit"]) or
+            lock["commit"] != reviewed["commit"] or
+            not isinstance(lock["tree"], str) or
+            not re.fullmatch(r"[0-9a-f]{40}", lock["tree"]) or
+            lock["tree"] != reviewed["tree"] or
+            not isinstance(lock["validation"], dict)):
+        raise ReportError("ArchBench source lock identity is malformed")
+    expected_count = lock["expected_tracked_files"]
+    if (not isinstance(expected_count, int) or isinstance(expected_count, bool) or
+            expected_count != reviewed["tracked_files"]):
+        raise ReportError("ArchBench tracked-file count differs from reviewed policy")
+    relative = lock["tracked_manifest"]
+    if (not isinstance(relative, str) or not relative or "\\" in relative or
+            Path(relative).is_absolute() or
+            Path(relative).as_posix() != relative or
+            any(part in ("", ".", "..") for part in Path(relative).parts)):
+        raise ReportError("ArchBench tracked manifest path is unsafe")
+    manifest_path = PROJECT_ROOT.joinpath(*Path(relative).parts)
+    if manifest_path != ARCHBENCH_TRACKED_MANIFEST:
+        raise ReportError("ArchBench tracked manifest path differs from policy")
+    if manifest_path.is_symlink() or not manifest_path.is_file():
+        raise ReportError("ArchBench tracked manifest is absent or not regular")
+    digest = sha256_file(manifest_path)
+    if (not isinstance(lock["tracked_manifest_sha256"], str) or
+            not re.fullmatch(r"[0-9a-f]{64}", lock["tracked_manifest_sha256"]) or
+            lock["tracked_manifest_sha256"] !=
+            reviewed["tracked_manifest_sha256"] or
+            digest != lock["tracked_manifest_sha256"]):
+        raise ReportError("ArchBench tracked manifest digest mismatch")
+    try:
+        text = manifest_path.read_text(encoding="ascii")
+    except (OSError, UnicodeError) as exc:
+        raise ReportError("cannot read ArchBench tracked manifest: %s" % exc) from exc
+    if not text.endswith("\n") or "\n\n" in text:
+        raise ReportError("ArchBench tracked manifest is not canonical")
+    entries = []
+    seen = set()
+    for ordinal, line in enumerate(text.splitlines(), 1):
+        match = _ARCHBENCH_MANIFEST_LINE.fullmatch(line)
+        if match is None:
+            raise ReportError(
+                "ArchBench tracked manifest line %d is malformed" % ordinal
+            )
+        mode, expected_sha256, name = match.groups()
+        parts = Path(name).parts
+        if ("\\" in name or Path(name).is_absolute() or
+                Path(name).as_posix() != name or
+                any(part in ("", ".", "..") for part in parts) or name in seen):
+            raise ReportError(
+                "ArchBench tracked manifest line %d has an unsafe/duplicate path" %
+                ordinal
+            )
+        seen.add(name)
+        entries.append((name, mode, expected_sha256))
+    names = [item[0] for item in entries]
+    if names != sorted(names) or len(entries) != expected_count:
+        raise ReportError(
+            "ArchBench tracked manifest order/count differs from the lock"
+        )
+    return manifest_path, digest, entries
+
+
+def _verify_archbench_tracked_content(root, entries):
+    """Verify exact reviewed files/modes while ignoring generated build output."""
+    if root.is_symlink() or not root.is_dir():
+        raise ReportError("ArchBench source root is absent or a symlink")
+    for name, expected_mode, expected_sha256 in entries:
+        candidate = root
+        for part in Path(name).parts:
+            candidate = candidate / part
+            if candidate.is_symlink():
+                raise ReportError("ArchBench tracked path contains a symlink: %s" % name)
+        digest, observed_mode = _archbench_regular_digest(candidate)
+        if digest != expected_sha256:
+            raise ReportError("ArchBench tracked file digest mismatch: %s" % name)
+        expected_executable = expected_mode == "100755"
+        observed_executable = bool(stat.S_IMODE(observed_mode) & 0o111)
+        if observed_executable != expected_executable:
+            raise ReportError("ArchBench tracked file mode mismatch: %s" % name)
+
+
 def archbench_source_binding(root):
-    """Fail closed if the canonical ArchBench checkout differs from its lock."""
+    """Fail closed unless canonical ArchBench bytes match the reviewed lock."""
+    if ARCHBENCH_SUBMODULE_ROOT.is_symlink():
+        raise ReportError("canonical ArchBench source root is a symlink")
     canonical = ARCHBENCH_SUBMODULE_ROOT.resolve()
+    root = Path(root).resolve()
     if root != canonical:
         return {
             "kind": "explicit-custom-root",
             "root": str(root),
             "pin_verified": False,
             "reason": (
-                "custom ArchBench roots are outside the repository submodule "
+                "custom ArchBench roots are outside the repository source "
                 "lock and require separate review"
             ),
         }
+    if (ARCHBENCH_SUBMODULE_LOCK.is_symlink() or
+            not ARCHBENCH_SUBMODULE_LOCK.is_file()):
+        raise ReportError("ArchBench source lock is absent or not regular")
     try:
         lock = strict_json(ARCHBENCH_SUBMODULE_LOCK)
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise ReportError("cannot load ArchBench submodule lock: %s" % exc) from exc
-    required = ("path", "url", "commit", "tree", "expected_tracked_files")
-    missing = [name for name in required if name not in lock]
-    if missing:
-        raise ReportError(
-            "ArchBench submodule lock lacks: %s" % ", ".join(missing)
-        )
-    if lock["path"] != str(root.relative_to(PROJECT_ROOT)):
-        raise ReportError("ArchBench submodule lock path does not match checkout")
+        raise ReportError("cannot load ArchBench source lock: %s" % exc) from exc
+    manifest_path, manifest_sha256, entries = _archbench_manifest(lock)
+    project_root = PROJECT_ROOT.resolve()
+    if lock["path"] != str(root.relative_to(project_root)):
+        raise ReportError("ArchBench source lock path does not match checkout")
+    _verify_archbench_tracked_content(root, entries)
+
+    binding = {
+        "kind": "pinned-embedded-tree",
+        "root": str(root),
+        "pin_verified": True,
+        "url": lock["url"],
+        "commit": lock["commit"],
+        "tree": lock["tree"],
+        "tracked_files": len(entries),
+        "lock": str(ARCHBENCH_SUBMODULE_LOCK.resolve().relative_to(project_root)),
+        "tracked_manifest": str(manifest_path.resolve().relative_to(project_root)),
+        "tracked_manifest_sha256": manifest_sha256,
+        "git_metadata_verified": False,
+    }
+    metadata = root / ".git"
+    if metadata.is_symlink():
+        raise ReportError("ArchBench Git metadata is a symlink")
+    if not metadata.exists():
+        return binding
 
     def git(*argv):
         completed = subprocess.run(
@@ -4224,20 +4402,24 @@ def archbench_source_binding(root):
 
     head = git("rev-parse", "HEAD").decode("ascii", "strict").strip()
     tree = git("rev-parse", "HEAD^{tree}").decode("ascii", "strict").strip()
-    tracked = [value for value in git("ls-files", "-z").split(b"\0") if value]
+    url = git("config", "--get", "remote.origin.url").decode(
+        "utf-8", "strict"
+    ).strip()
+    tracked_raw = [value for value in git("ls-files", "-z").split(b"\0") if value]
+    try:
+        tracked = [value.decode("utf-8", "strict") for value in tracked_raw]
+    except UnicodeError as exc:
+        raise ReportError("ArchBench Git path is not UTF-8") from exc
     dirty = git("status", "--porcelain", "--untracked-files=no")
-    expected_count = lock["expected_tracked_files"]
-    if not isinstance(expected_count, int) or isinstance(expected_count, bool):
-        raise ReportError("ArchBench expected_tracked_files is not an integer")
     mismatches = []
     if head != lock["commit"]:
         mismatches.append("commit %s != %s" % (head, lock["commit"]))
     if tree != lock["tree"]:
         mismatches.append("tree %s != %s" % (tree, lock["tree"]))
-    if len(tracked) != expected_count:
-        mismatches.append(
-            "tracked files %d != %d" % (len(tracked), expected_count)
-        )
+    if url != lock["url"]:
+        mismatches.append("origin URL %s != %s" % (url, lock["url"]))
+    if tracked != [item[0] for item in entries]:
+        mismatches.append("Git tracked path set differs from the content manifest")
     if dirty:
         mismatches.append("tracked files are locally modified")
     if mismatches:
@@ -4245,16 +4427,13 @@ def archbench_source_binding(root):
             "ArchBench submodule does not match its reviewed lock: %s" %
             "; ".join(mismatches)
         )
-    return {
+    binding.update({
         "kind": "pinned-submodule",
-        "root": str(root),
-        "pin_verified": True,
-        "url": lock["url"],
         "commit": head,
         "tree": tree,
-        "tracked_files": len(tracked),
-        "lock": str(ARCHBENCH_SUBMODULE_LOCK.relative_to(PROJECT_ROOT)),
-    }
+        "git_metadata_verified": True,
+    })
+    return binding
 
 
 def run_archbench(args, output, runner, bdfs, ledger):
@@ -4600,7 +4779,7 @@ def render(document, output, commands):
         "1. **Retain CMP identity/VBIOS:** review the common-topology segment from epoch 000, then withhold isolated PCIe until a cold recapture and rebase. Keep device ID `20c2`; VBIOS and CMP driver/EFI memory/PCIe policy remain external. NVLink, SYS_PIPE and media are separate non-route overlays.",
         "2. **Convert to A100 identity/VBIOS:** perform and cold-verify the common topology stages first, prepare a recoverable A100 VBIOS migration, and place the `20b5` identity records last as their own commit domain. After the A100 VBIOS is proven, apply the required software SM/topology policy; A100 identity alone does not manufacture healthy SMs, HBM, media engines, NVLink routing, ECC, or MIG sufficiency.",
         "",
-        "Both routes are non-authorizing models. The seven current-baseline sealed-v2 manifests per card are sibling, non-cumulative alternatives; only common topology is referenced as the initial current segment. Every later OTP segment is withheld for cold recapture and rebase.",
+        "Both routes are non-authorizing models. The seven current-baseline sealed-v3 manifests per card are sibling, non-cumulative alternatives; only common topology is referenced as the initial current segment. Every later OTP segment is withheld for cold recapture and rebase.",
         "", route_summary,
         "", "### Specimen-specific theoretical ceilings", "",
         "These are defect-preserving arithmetic ceilings, not promises that a die, VBIOS, firmware or driver will operate at the projected state.",

@@ -46,7 +46,7 @@ The access levels are:
 | 3 | `semantic-read` | controller address/read/RIR-RWL transactions with checked restoration |
 | 4 | `plan` | offline only; zero device access |
 | 5 | `volatile-write` | named policy level; no volatile executor is implemented |
-| 6 | `otp-write` | narrow experimental v2 blank-FF append backend only |
+| 6 | `otp-write` | narrow experimental v3 blank-FF append backend only |
 
 `nvidia-smi`/NVML calls are query-only at their public boundary, but proprietary
 driver/firmware internal effects are opaque. Use `--no-driver-queries` when the
@@ -312,7 +312,7 @@ python3 "$XRAY" apply "$XRAY_OUT/plan-evidence-only.json" \
   --output "$XRAY_OUT/volatile-apply-validation.json"
 ```
 
-Generate a specimen-bound 18-profile candidate from one native Level-3 file.
+Generate a specimen-bound 24-profile candidate from one native Level-3 file.
 The offline planner checks same-capture consistency but cannot prove temporal
 currentness; this output is historical review material, not an authoritative
 current report route:
@@ -328,8 +328,10 @@ python3 tools/170hx_candidate_plan.py \
 
 The candidate computes memory from direct FBP defects plus paired
 FBPA/FBIO/ROP-L2 closure (64, 80 or 96 GiB at the qualified CMP density) and SM
-ceiling from direct GPC/TPC/PES closure (up to 128 SM). A defect ceiling is not
-health proof. The two route models remain distinct:
+ceiling from direct GPC/TPC/PES closure (up to 128 SM). Other paired counts such
+as 18/22 subpartitions (72/88 GiB at 4 GiB per subpartition) remain diagnostic
+and are rejected as targets. A defect ceiling is not health proof. The two
+route models remain distinct:
 
 1. `retain-cmp-20c2`: cold-validate common topology, recapture and rebase before
    isolated PCIe work, retain `20c2`, then perform any required external CMP
@@ -397,18 +399,67 @@ The seven admitted profiles are `specimen-80gb-hbm` (dynamic 64/80/96 target),
 `specimen-pcie-gen4-isolated`, `specimen-a100-20b5-identity`,
 `specimen-sys-pipe-to-defect-experimental`, and
 `specimen-media-mig-to-defect-experimental`. Four cards produce 28 manifests.
-The candidate planner exports 18 profiles in total, including six
+The candidate planner exports 24 profiles in total, including twelve
 zero-operation review-only profiles. `specimen-nvlink-global` is candidate-only
 and is rejected by both compiler and runtime: Chain-1 bits 368--370 are global
 IOCTRL group disables, not the twelve-link physical map. The historical 4.2
 validation retained 32 manifests; that count is not the current admission
 contract. See [`UNLOCK_PLAN.md`](UNLOCK_PLAN.md).
-NVJPG/OFA bits 146/371 remain inseparable; NVENC has no supported physical
-coordinate. The 28 manifests in a four-card current-baseline matrix are seven
+NVJPG/OFA bits 146/371 are one inseparable logical intent but two sequential
+row appends with an unavoidable asymmetric prefix; they are not hardware
+atomic. NVENC has no supported physical coordinate. The 28 manifests in a
+four-card current-baseline matrix are seven
 siblings per card, not seven ordered operations per card. Applying one sibling
 invalidates the other six. Route execution begins, if independently reviewed
 and authorized elsewhere, with only the common-topology segment and then
 requires a cold capture and exact-current rebase before the next segment.
+
+## Build and verify a self-contained release bundle
+
+This is offline. The manifest-set directory must contain exactly four cards ×
+seven current manifests. Every filename is a checked binding and must be
+`<BDF-slug>__<canonical-profile>.json`, for example
+`0000-01-00-0__specimen-80gb-hbm.json`. Aliases, a single-hyphen separator,
+wrong BDF/profile pairs, duplicates and extra manifests are refused before the
+output directory is created.
+
+The input directory must have this exact sealed shape. Its `SHA256SUMS` uses
+two spaces between each lowercase SHA-256 digest and its `manifests/...` path:
+
+```text
+$XRAY_OUT/manifests-v3/
+├── SHA256SUMS
+└── manifests/
+    ├── 0000-01-00-0__specimen-80gb-hbm.json
+    └── ... exactly 27 more canonical files
+```
+
+```sh
+(cd "$XRAY_OUT/manifests-v3" && \
+  find manifests -maxdepth 1 -type f -name '*.json' -print0 | \
+  LC_ALL=C sort -z | xargs -0 shasum -a 256 > SHA256SUMS)
+```
+
+```sh
+python3 tools/170hx_full_release_bundle.py build \
+  --full-dump-bundle "$XRAY_OUT/full-dump" \
+  --candidate "$XRAY_OUT/candidate.json" \
+  --manifest-set "$XRAY_OUT/manifests-v3" \
+  --output "$XRAY_OUT/complete-release-bundle"
+
+python3 tools/170hx_full_release_bundle.py verify \
+  --bundle "$XRAY_OUT/complete-release-bundle"
+
+(cd "$XRAY_OUT/complete-release-bundle" && \
+  shasum -a 256 -c SHA256SUMS)
+```
+
+The bundle preserves all read transports, 96 candidate profiles, four
+proposed-image formats per profile, all 28 sealed-v3 manifests, and the exact
+frontend/planner/compiler/validator/backend sources needed for independent
+semantic verification. Building or verifying it never invokes the planner,
+OTP backend or a GPU. `valid=true` proves package consistency, not electrical
+safety or authorization.
 
 ## Temperature diagnostics
 
@@ -549,11 +600,14 @@ cd "$XRAY_ROOT/third_party/archbench_cuda13_5_v0_2_0"
 cd "$XRAY_ROOT"
 ```
 
-The report command defaults to that commit-pinned submodule and verifies its
-commit, tree, tracked-file count and clean tracked state against
-`docs/ARCHBENCH_SUBMODULE_LOCK.json` before execution. `--archbench-root`
-selects a different reviewed tree and derives `build/bin/archbench_sm80` below
-it; pass `--archbench-binary` only when that reviewed worker is elsewhere.
+Full-report 0.8 defaults to that commit-pinned submodule. Before execution it
+verifies the exact 104-path mode/SHA-256 manifest, then the origin URL, commit,
+Git tree, tracked path set and clean tracked state against
+`docs/ARCHBENCH_SUBMODULE_LOCK.json` and
+`docs/ARCHBENCH_TRACKED_SHA256SUMS`. Untracked build products are allowed but
+never counted as reviewed source. `--archbench-root` selects a different
+reviewed tree and derives `build/bin/archbench_sm80` below it; pass
+`--archbench-binary` only when that reviewed worker is elsewhere.
 
 ```sh
 python3 tools/170hx_full_report.py "$XRAY_OUT/report-archbench" \
@@ -583,14 +637,14 @@ numbered view and does not turn independent profile results into a sequence:
    `cross-checked-theory`, and `compare`. Each model has JSON, JSONL, text, and
    canonical-JSON binary transports, plus an inert apply dry-run and OTP
    readiness record.
-2. The exact-current option matrix emits all 18 profiles per card. The whole
+2. The exact-current option matrix emits all 24 profiles per card. The whole
    candidate is replay-checked as JSON, JSONL, text, and canonical-JSON binary;
    every profile's proposed complete 512-row MAIN image is also independently
    replay-checked as JSON, JSONL, indexed text, and raw u32le. Each profile is
    an independent answer from the same baseline, not a step to add to another
    profile.
 3. The current-baseline sibling-manifest layer compiles and verifies the seven
-   admitted v2 profiles per card. All seven start from the same baseline and
+   admitted v3 profiles per card. All seven start from the same baseline and
    are mutually exclusive alternatives. It does not review, execute, pulse, or
    authorize them.
 
@@ -620,7 +674,7 @@ route for execution. The top-level layout is:
 |   |-- SHA256SUMS
 |   |-- candidate-plan.{json,jsonl,txt,canonical-json.bin}
 |   |-- cards/<BDF>/profiles/<PROFILE>/
-|   |   |-- profile-binding.json           # all 18 options
+|   |   |-- profile-binding.json           # all 24 options
 |   |   `-- proposed-main.{json,jsonl,indexed.txt,raw-u32le.bin}
 |   `-- current-baseline-sibling-manifests/<BDF>/
 |       |-- README-NOT-CUMULATIVE.md
@@ -666,7 +720,7 @@ products. `shared/` adds immutable MAIN/RIR copies and small evidence/checklist
 indexes consumed by both routes. The legacy `candidate-plan-exports/` and
 `candidate-proposed-images/` paths remain for compatibility. `option-matrix/`
 contains hash-identical physical copies of all four candidate transports, all
-18 independent profile bindings and all four proposed-row transports per
+24 independent profile bindings and all four proposed-row transports per
 profile. HBM-only and SM-only are alternatives/subsets of common topology;
 SYS_PIPE-only and media/MIG overlap. Do not concatenate their row changes. The
 seven JSON files in each `current-baseline-sibling-manifests/<BDF>/` directory
@@ -698,7 +752,7 @@ Only `010-common-topology` is eligible to reference a compiled manifest from
 an exact-current initial `000-baseline`; a historical review has no current
 segment. Its authoritative manifest is stored once in the option matrix rather
 than copied into both routes. Every subsequent hardware segment is withheld
-until a new cold capture and exact-current rebase. Version 0.7 packages only
+until a new cold capture and exact-current rebase. Version 0.8 packages only
 the initial `000-baseline` route state; it does **not** promote a changed-card
 capture to epoch 001/002 or compile the next route segment automatically:
 
@@ -829,7 +883,7 @@ ls -l "$XRAY_REPORT/routes/convert-a100-20b5"/route.*
 ```
 
 After an independently authorized segment and required cold validation, retain
-the old report unchanged. Capture the changed card, but do not feed it to v0.7
+the old report unchanged. Capture the changed card, but do not feed it to v0.8
 and assume that a newly generated `000-baseline` tree represents epoch 001.
 Automatic post-write epoch advancement is not implemented. Do not copy an old
 manifest, edit `current_epoch`, or rename a withheld marker; use separately
@@ -919,6 +973,18 @@ native DSOV=0 held-state capture, controlling TTY acknowledgements, the canonica
 sysfs root, electrical qualification, a recovery path and a separately reviewed
 cold-validation plan. A parser pass, favorable glitch classifier, prompt or
 protected initial state is not authorization.
+
+The v3 runtime accepts only a helper-certified capture whose two MAIN and two
+RIR passes were serialized inside one helper ioctl transaction; this is not a
+hardware-atomic snapshot and the certificate must explicitly say
+`hardware_atomic_snapshot=false`. After the fuse plane is armed, both complete
+512-row passes must equal the held-state image exactly, including the prefix,
+IFF header/payload and tail. The current live transport uses userspace
+`resource0` mmap and therefore cannot atomically exclude a concurrent PCI
+bind/remove; its sentinel, inode and immediate re-attestation narrow but do not
+close that TOCTOU. The `inert-then-arm-experimental-trace-only` strategy is an
+offline two-pulse transaction trace only: it is absent from executable strategy
+choices and cannot authorize a live run.
 
 After a separately authorized physical power cycle, cold verification is
 offline with respect to programming but consumes new native evidence:

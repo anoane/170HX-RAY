@@ -11,6 +11,38 @@ equivalent or stricter way to represent and verify the useful behavior. It does
 not mean that every proposed fuse semantic is proven, or that an XRAY candidate
 plan is permission to program OTP.
 
+## Pinned upstream reconciliation (2026-11-27 through 2026-11-28)
+
+The comparisons below are bound to exact commits. A project date or a passing
+offline suite does not promote an electrically irreversible recipe by itself.
+The detailed disposition of every material delta is recorded in
+[UPSTREAM_RECONCILIATION_2026-11-27.md](UPSTREAM_RECONCILIATION_2026-11-27.md).
+
+| Project | Audited commit | Commit date | Scope of the current delta |
+|---|---|---|---|
+| pico-ga100vfi-console | [e9e9a33c8b3515563959f7239a0df2a1a3b6eef3](https://github.com/portz3r0/pico-ga100vfi-console/tree/e9e9a33c8b3515563959f7239a0df2a1a3b6eef3) | 2026-11-28 +11:00 | Two-step FF transaction, paired A100 identity queue, VBIOS workflow and additional readouts; no commit exists after this requested baseline |
+| cmp170hx-ffcalc | [e28e03a40ade83079f518df7416072daea047bf9](https://github.com/sayhellotojungle/cmp170hx-ffcalc/tree/e28e03a40ade83079f518df7416072daea047bf9) | 2026-11-27 +08:00 | Expanded status/readout map and write-window gates, plus an explicitly untested SW-IFF path |
+| cmp170hx-8gb-vfi-tools | [f422f80a716fff2c1dc112abcf2e9d43a04b6614](https://github.com/darkmaniac7/cmp170hx-8gb-vfi-tools/tree/f422f80a716fff2c1dc112abcf2e9d43a04b6614) | 2026-11-27 -06:00 | Consolidated fuse reference, corrected PCIe isolation and additional review-only community hypotheses |
+| esp32-ga100vfi | [37d14e9698e5926ca1b1f7e86b61d340f93414a2](https://github.com/sayhellotojungle/esp32-ga100vfi/tree/37d14e9698e5926ca1b1f7e86b61d340f93414a2) | 2026-11-27 +08:00 | Operational workflow and post-cold checks; no new physical fuse coordinates |
+| cmpunlocker | [8b6c556fedaa0150a6fc40c74297b20cb5e508a6](https://github.com/sayhellotojungle/cmpunlocker/tree/8b6c556fedaa0150a6fc40c74297b20cb5e508a6) | 2026-11-26 +08:00 | Experimental HBM idle governor registers and state transitions; no fuse-plan delta |
+
+### Offline suite results at those pins
+
+Offline tests are useful for parser and planner regressions; they are not
+hardware qualification. The 2026-11-28 source-only rerun produced these exact
+results without opening a GPU or invoking a glitch/program path:
+
+| Project | Current-pin result | What it establishes—and does not establish |
+|---|---|---|
+| `cmp170hx-ffcalc@e28e03a` | 101/101 pass on CPython 3.14.8 and 3.15.2 | Its own offline examples are internally reproducible. They do not cure the fail-open/missing-block, ordering, boundary or physical-validation gaps below. |
+| `cmp170hx-8gb-vfi-tools@f422f80` | Refuses current ffcalc `e28e03a` with exit 3; 487/487 checks and 10/10 mutants pass only against pinned ffcalc `4e089b5` | The advertised parity suite is stale relative to current ffcalc and cannot establish current cross-tool agreement. |
+| `ga100-ff-tools@594e83d` | 7/7 pass on CPython 3.14.8; CPython 3.15.2 fails during import because `SourceFileLoader.load_module()` was removed, so zero real tests run | The supported-runtime suite passes narrowly; it is not Python-3.15 compatible and does not validate physical programming. |
+| `esp32-ga100vfi@37d14e9` | Clean-source wrapper fails on macOS BSD `sed -i`; direct CPython 3.14 run executes 287 tests with five errors and one skip because tracked tests require absent, untracked `temp/` fixtures | The clean-clone offline suite is not reproducible at this pin. Resource warnings also remain. |
+| `pico-ga100vfi-console@e9e9a33` | 41/41 host tests pass on CPython 3.14.8 and 3.15.2; standalone dedupe, die-gate and Pico-flash self-checks also pass | This validates those host-side checks. It does not negate the timeout-as-absence, reserve, plane-gate, abort/re-entry, journal or VBIOS-binding defects documented below. |
+
+All tested upstream worktrees remained clean. No result in this table promoted a
+new fuse coordinate, execution profile, electrical waveform or OTP authority.
+
 ## Current `ga100-ff-tools` comparison
 
 The current audited upstream revision is
@@ -39,9 +71,10 @@ gaps above explain why XRAY does not import its behavior blindly.
 ## Fuse-by-fuse coverage audit
 
 The second public baseline in this table is `cmp170hx-ffcalc` revision
-`3d157f254991904674fb0f47d5e236ac4f9b5ce7` (2026-11-25), which is newer than
-the snapshot in the initial research inventory and adds SYS_PIPE/media and
-identity options. The `ga100-ff-tools` baseline remains revision
+`e28e03a40ade83079f518df7416072daea047bf9` (2026-11-27). It retains the
+SYS_PIPE/media and identity options from the earlier snapshot and adds a much
+broader read-only status map, stricter write-window observations and an
+explicitly hardware-untested SW-IFF path. The `ga100-ff-tools` baseline remains revision
 `594e83ddd336469aea303d466d0c1d2a1edb2d05` (2026-11-20). Dates matter, but a
 newer claim still needs an exact-card proof. “Eligible” below means only that
 XRAY's independent compiler/runtime policy can review a sealed candidate;
@@ -112,6 +145,31 @@ plausible target. This is broader observation, not broader write authority.
 | ECC/MIG/media | Most tools omit the dependency planes; current ffcalc adds a narrower media path | Conventional controls, SYS_PIPE/GPC/memory partitions, media option/CP/defect/control/status, PTOP, HS/power/ucode/security and functional tests |
 | Identity | Some tools forbid it; others emit two ID rows and optionally guess MAGIC_D | Paired IDs only, identity last, signed-ROM compatibility, 128-GiB BAR/platform check and external SPI recovery |
 | DSOV/write gates | A glitch phenotype can be treated as sufficient | Controller entry state, privilege/security/program gates, fresh held-state attestation, electrical qualification and cold verification are separate gates |
+
+## Pinned upstream deltas and retained boundaries
+
+The following table records both the useful improvement and the reason it was
+not copied blindly. References are exact paths and line ranges at the pinned
+commit in the table above.
+
+| Upstream | Material improvement | Retained contradiction or unsafe gap |
+|---|---|---|
+| pico-ga100vfi-console | The two-step FF transaction writes and verifies a chain-zero inert word before adding only the chain bits (host/ga100vfi/console/service.py:1052-1177). The A100 queue pairs DEVIDA and DEVIDB and the later correction removes the unproved 40-GB SKU (service.py:1418-1469). VBIOS flashing now requires a fresh backup, an unbound device and unloaded NVIDIA modules (service.py:3310-3453). | The campaign path calls the burner without the standalone plane gate (service.py:2523-2570), and an ABORT resumes glitch attempts (service.py:2579-2583). Row-read timeouts are discarded as if the row were absent (service.py:1324-1329); the FF end remains fixed at 487 (service.py:254-255); per-block placement bypasses buffer and recovery reserves (service.py:1377-1410). A command timeout still reaches volatile cleanup writes (service.py:1145-1184), and journal uncertainty can be operator-overridden (service.py:1072-1076). The VBIOS endpoint accepts any existing .rom path without a sealed image digest, parsed target identity, board-policy binding or exact-card recovery artifact; a missing serial can share the generic noserial backup namespace. The repository still documents five pre-existing full-suite failures (evidence/63-two-step-burn.md:112-120). |
+| cmp170hx-ffcalc | The read-only catalog now covers controller/debug/IFF/CRC/EFP/program/security state, feature overrides, speed selectors, ECC/geometry and GFW/lane/HBM-PLL observations (ffcalc/data/ga100-fuses.json:65-105). The write-window probe checks poison/idle, DEBUGCTRL, CRC, EFP, program-disable, DSOV, privilege and armed PLM state (ffcalc/ffmacro.py:156-199,240-254). | Its reader/planner still enforces static rows 222..487 even though a separate helper exposes an IFF-derived window (ffmacro.py:267-278,308-319). Idle means only state 4 plus command 0 rather than the exact qualified word (ffmacro.py:64-65), and timeout/poison paths still restore FUSEADDR (ffmacro.py:68-119,202-219). A missing starting block becomes zero instead of an error (generate.py:142-169,178), so unknown co-resident bits can be erased logically. Defect mismatches are warning-only, there is no memory-pair invariant, and media defect inference uses STATUS AND NOT OPT even though equality cannot prove defect-free silicon (analyze.py:48-101,120-152). Operations sort lexically by chain/block rather than dependency-safe prefixes and there is no enforced correction/revert reserve (generate.py:176-193). The only row-487 exercise is fake, and 101/101 offline tests do not establish a physical burn. |
+| cmp170hx-ffcalc PCIe | The current map names the relevant PCIe option groups and distinguishes identity from link policy. | It still clears block-39 bits 1 and 9 together although the isolated cold result falsified bit 1 (optionmap.py:151-156). The A100 route offers a whole-word MAGIC_D target of 0x00200000 which its own text calls an unmeasured guess (optionmap.py:163-174,204-208; generate.py:36-53,108-127). XRAY keeps only isolated bit 9 and MAGIC_D bit 25 eligible. |
+| cmp170hx-ffcalc SW-IFF | A separate software-IFF path makes the proposed mechanism inspectable (ffmacro.py:308-387). | The source explicitly says it was never hardware-tested (ffmacro.py:341-347). It does not validate record bit 5, chain/block encoding, live occupancy, pulse completion or readback, and it does not restore EN_SW_OVERRIDE, IFF_RECORD or IFF_SW_FUSING. The burn artifact is a list rather than a UUID/fingerprint-bound complete state (burntool.py:188 onward; dump.py:204-212). Its initial gate requires EFP=1 before the later sense command, while the pinned ESP32 workflow reports fresh Goldilocks EFP=0 followed by sense-to-1 (burntool.py:119-131; esp32 README.md:112-118,245-257). Execution remains rejected. |
+| cmp170hx-8gb-vfi-tools | docs/FUSES.md consolidates the dynamic-boundary warning, SM and HBM topology arithmetic, the 64/80/96-GB pair rule, isolated PCIe bit 9/MAGIC_D bit 25/boot bits 6 and 7, identity and media/MIG evidence (docs/FUSES.md:43-53,122-204,220-312). The planner correctly refuses a field whose starting block is unknown (tools/fuseplan/src/core.js:982-984). | The implementation still fixes its usable end at row 486 (core.js:5-9), while its documentation describes a dynamic boundary and discusses row 487. Its docs say to skip 0xffffffff but replay treats it as a bit-5 stop record (docs/FUSES.md:350-352; core.js:210-233). The 16-row reserve is only a warning (core.js:841-844); physical planning covers only compute, memory, PCIe, global NVLink and SYS_PIPE, with media and identity omitted (core.js:21-67; README.md:74-76). Its 487 offline checks compare against older ffcalc revision 4e089b5 and do not establish current parity or electrical safety. |
+| cmp170hx-8gb-vfi-tools hypotheses | It records chain-1 block 26 RECONFIG, chain-2 blocks 78/79 speed-select candidates and several conventional-row hypotheses, making community claims reviewable (docs/FUSES.md:147-155,269-338). | Block 26, blocks 78/79, ECC/remapper/VGX/OpenGL/DP-control/TTU conventional rows remain review-only. No isolated cold result or complete feature dependency closure justifies an executable operation. |
+| esp32-ga100vfi | The README now documents a two-pass capture, generate/simulate/verify workflow, independent cross-check, explicit sense/arm/program sequence and post-cold validation (README.md:192-275). It adds no new fuse coordinate. | It hard-codes FF rows 222..486 and IFF rows 487..511 (README.md:71-79,203,215,228), contradicting the same-day ffcalc specimen model with IFF beginning at 488. It proposes a real one-row canary (README.md:232-238), consuming finite OTP space. Its new AND NOT old equals zero check (README.md:81-88,228) is a conservative local policy, not FF last-wins physics: an append goes into a physically blank row and its payload replaces the earlier logical block, so the new logical word may contain both cleared and set bits relative to the previous winner. |
+| cmpunlocker | Master adds a carefully documented HBM idle-governor register set: FBPA geometry/refresh, HBM PLL and serial-priv aliases, PRI fence, framebuffer-stop handshake, PMU counters, GFW boot and GSP status (common/constants.yaml:117-154; driver/hbm-pm/cmp_hbm_pm.c:91-149). | This is a stateful runtime power mechanism, not a fuse-map discovery. The write sequence must not be promoted into a read-only level. Registers not already allowlisted remain review-only until access class, ownership, workload exclusion and recovery are independently established. The separate test-gen4-rootport-ladder branch is also runtime link training, not a fuse delta. |
+
+The console's advanced-unlock heading also claims its plans were executed and
+confirmed, while its own evidence says signature checking was skipped for one
+decode and that all 31 expected writes were absent from the alleged GPU2 post
+image, which belonged to a different card
+(evidence/30-advanced-unlocks.md:25-31;
+evidence/60-gpu2-burn-truth.md:155-172). Its TTU, ECC and row-remapper direct
+rows therefore remain attribution hypotheses, not a PLM-unlock recipe.
 
 ## Other public projects
 

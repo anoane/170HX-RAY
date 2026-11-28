@@ -977,6 +977,9 @@ class DiagnosticOrchestratorTests(unittest.TestCase):
         self.assertIn("load_device_record", source)
         self.assertIn("valid_sample_counts", source)
         self.assertIn("query_failure_counts", source)
+        self.assertIn("NVML_API_VERSION >= 13", source)
+        self.assertIn("nvmlDeviceGetTemperatureV(device, &temperature)", source)
+        self.assertEqual(source.count("nvmlDeviceGetTemperature("), 1)
         emitted = {
             match[0]: (
                 int(match[1]), int(match[2]), match[3], match[4]
@@ -1415,7 +1418,9 @@ class DiagnosticOrchestratorTests(unittest.TestCase):
             cards, Path("/fake/ga100_diag"), args, FakeRunner(helper)
         )
         self.assertEqual(result["status"], "pass")
-        self.assertEqual(cards[0]["cuda"]["cuda_index"], 3)
+        cuda_record = cards[0]["cuda"]
+        self.assertIsInstance(cuda_record, dict)
+        self.assertEqual(dict(cuda_record or {}).get("cuda_index"), 3)
         self.assertFalse(
             result["mapping_comparisons"][0]["indices_happen_to_match"]
         )

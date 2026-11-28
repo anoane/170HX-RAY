@@ -6,7 +6,7 @@
 The builder never discovers a GPU, opens BAR space, executes a candidate
 planner, or invokes an OTP backend.  It accepts only already-created evidence:
 one verified 170HX-XRAY full-dump bundle, one exact-current four-card candidate,
-and the complete current four-card/seven-profile sealed-v2 manifest matrix.
+and the complete current four-card/seven-profile sealed-v3 manifest matrix.
 
 The immutable 4.2 demonstration report used an older eight-profile matrix. Its
 inventory is retained as an explicitly historical constant only; current
@@ -30,8 +30,8 @@ import struct
 import sys
 
 
-VERSION = "0.4.0"
-SCHEMA = "170hx-xray-complete-release-bundle-v1"
+VERSION = "0.6.0"
+SCHEMA = "170hx-xray-complete-release-bundle-v2"
 CANDIDATE_SCHEMA = "170hx-xray-candidate-plan-v1"
 READ_LEVELS = ("passive", "bar-read", "semantic-read", "glitch-read")
 CANDIDATE_PROFILES = (
@@ -53,6 +53,12 @@ CANDIDATE_PROFILES = (
     "review-ecc-conventional",
     "review-nvenc-unsupported",
     "review-nvlink-per-link-unsupported",
+    "review-reconfig-last-sm-ff",
+    "review-speed-select-ff",
+    "review-row-remapper-conventional",
+    "review-vgx-conventional",
+    "review-opengl-conventional",
+    "review-ttu-conventional",
 )
 CURRENT_MANIFEST_PROFILES = (
     "specimen-80gb-hbm",
@@ -151,7 +157,7 @@ def _modules(root):
         raise BundleError("project frontend is absent")
     backend = project / "otp_vfi_append.py"
     if not backend.is_file():
-        raise BundleError("v2 manifest backend is absent")
+        raise BundleError("v3 manifest backend is absent")
     return (
         frontend,
         _load_module(frontend, "full_release_frontend"),
@@ -534,6 +540,21 @@ def _manifest_paths(path):
     return paths
 
 
+def _canonical_manifest_filename(key):
+    """Return the sole accepted filename for one bound manifest."""
+    return "%s__%s.json" % (_slug_bdf(key[0]), key[1])
+
+
+def _require_canonical_manifest_filename(path, key):
+    expected = _canonical_manifest_filename(key)
+    if Path(path).name != expected:
+        raise BundleError(
+            "manifest filename is not canonical for %s/%s: expected %s" %
+            (key[0], key[1], expected)
+        )
+    return expected
+
+
 def validate_manifest_checksums(path, paths):
     """Require one canonical, complete checksum binding for the matrix."""
     root = Path(path).resolve()
@@ -584,6 +605,7 @@ def validate_manifests(path, backend, candidate_path, candidate,
         key = (binding.get("bdf"), binding.get("profile_id"))
         if key not in expected or key in validated:
             raise BundleError("duplicate/unexpected manifest binding: %r" % (key,))
+        _require_canonical_manifest_filename(manifest_path, key)
         try:
             result = backend.load_and_validate_manifest(
                 manifest_path, key[0], key[1]
@@ -747,7 +769,8 @@ def build(full_dump, candidate, manifest_set, output, root=None):
     manifest_entries = []
     for key in sorted(manifest_results):
         source = manifest_sources[key]
-        target = output / "planning" / "sealed-v2-manifests" / source.name
+        target = (output / "planning" / "sealed-v3-manifests" /
+                  _canonical_manifest_filename(key))
         _copy_file(source, target)
         manifest_entries.append({
             "bdf": key[0], "profile_id": key[1],
@@ -800,8 +823,8 @@ def build(full_dump, candidate, manifest_set, output, root=None):
             "execution_authorized": False,
         },
         "plan_exports": plan_entries,
-        "sealed_v2_manifests": manifest_entries,
-        "sealed_v2_manifest_set": {
+        "sealed_v3_manifests": manifest_entries,
+        "sealed_v3_manifest_set": {
             "source_checksum_path": str(manifest_checksum_path),
             "source_checksum_sha256": manifest_checksum_sha256,
             "verified": True,
@@ -809,7 +832,7 @@ def build(full_dump, candidate, manifest_set, output, root=None):
         "counts": {
             "cards": 4,
             "candidate_profiles": len(plan_entries),
-            "sealed_v2_manifests": len(manifest_entries),
+            "sealed_v3_manifests": len(manifest_entries),
             "read_levels_available": sum(
                 1 for item in coverage["levels"] if item["available"]),
             "read_levels_unavailable": len(coverage["unavailable_levels"]),
@@ -886,7 +909,7 @@ def _validate_implementation_dependencies(bundle, index):
         "candidate-planner": candidate_tool.get("sha256"),
     }
 
-    manifest_items = index.get("sealed_v2_manifests")
+    manifest_items = index.get("sealed_v3_manifests")
     expected_manifest_count = 4 * len(MANIFEST_PROFILES)
     if (not isinstance(manifest_items, list) or
             len(manifest_items) != expected_manifest_count):
@@ -1248,7 +1271,7 @@ def _verify_semantic_bundle(bundle, root):
         (card["bdf"], profile_id) for card in candidate["cards"]
         for profile_id in MANIFEST_PROFILES
     }
-    manifest_entries = index.get("sealed_v2_manifests")
+    manifest_entries = index.get("sealed_v3_manifests")
     expected_manifest_count = 4 * len(MANIFEST_PROFILES)
     if (not isinstance(manifest_entries, list) or
             len(manifest_entries) != expected_manifest_count):
@@ -1265,8 +1288,9 @@ def _verify_semantic_bundle(bundle, root):
                 "duplicate/unexpected sealed manifest binding: %r" % (key,)
             )
         observed_manifest_keys.add(key)
-        expected_relative = "planning/sealed-v2-manifests/%s__%s.json" % (
-            _slug_bdf(key[0]), key[1],
+        expected_relative = (
+            "planning/sealed-v3-manifests/%s" %
+            _canonical_manifest_filename(key)
         )
         manifest_path = _safe_bundle_path(
             bundle, item.get("path"),
@@ -1312,7 +1336,7 @@ def _verify_semantic_bundle(bundle, root):
     counts = index.get("counts")
     if not isinstance(counts, dict) or (
             counts.get("cards"), counts.get("candidate_profiles"),
-            counts.get("sealed_v2_manifests")) != (
+            counts.get("sealed_v3_manifests")) != (
                 4,
                 4 * len(CANDIDATE_PROFILES),
                 4 * len(MANIFEST_PROFILES),

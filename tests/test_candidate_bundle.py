@@ -216,6 +216,10 @@ class CandidateBundleTests(unittest.TestCase):
             "review-dp-conventional", "review-ecc-conventional",
             "review-nvenc-unsupported",
             "review-nvlink-per-link-unsupported",
+            "review-reconfig-last-sm-ff", "review-speed-select-ff",
+            "review-row-remapper-conventional",
+            "review-vgx-conventional", "review-opengl-conventional",
+            "review-ttu-conventional",
         }
         profiles = {item["id"]: item for item in TOOL.PROFILE_SPECS}
         self.assertTrue(review_ids.issubset(profiles))
@@ -242,6 +246,88 @@ class CandidateBundleTests(unittest.TestCase):
                 "STATUS_OPT_NVENC", "PTOP_SCAL_NUM_NVENCS",
             ],
         )
+
+        reconfig = profiles["review-reconfig-last-sm-ff"]["review_only"][
+            "subjects"
+        ][0]
+        self.assertEqual(
+            (reconfig["reported_chain"], reconfig["reported_block"],
+             reconfig["reported_word"]),
+            (1, 26, "0x00000681"),
+        )
+        self.assertEqual(reconfig["portable_target_certainty_percent"], 0)
+
+        speed = profiles["review-speed-select-ff"]["review_only"][
+            "subjects"
+        ][0]
+        self.assertEqual(
+            speed["reported_records"],
+            [
+                {"chain": 2, "block": 78, "word": "0x00001382"},
+                {"chain": 2, "block": 79, "word": "0x2e0013c2"},
+            ],
+        )
+        self.assertEqual(speed["portable_target_certainty_percent"], 0)
+
+    def test_media_pair_is_logically_inseparable_but_physically_sequential(self):
+        profiles = {item["id"]: item for item in TOOL.PROFILE_SPECS}
+        profile = profiles["specimen-media-mig-to-defect-experimental"]
+        stage = next(
+            item for item in profile["stages"]
+            if item["name"] == "nvjpg-ofa-inseparable-pair"
+        )
+        purpose = stage["purpose"]
+        self.assertIn("inseparable logical intent", purpose)
+        self.assertIn("sequential append operations", purpose)
+        self.assertIn("unavoidable asymmetric prefix", purpose)
+        self.assertNotIn("atomic planning unit", purpose)
+
+    def test_changed_block_without_prior_replay_is_rejected(self):
+        profile = {
+            "id": "missing-prior-replay",
+            "model_type": "specimen-derived",
+            "intent": "regression test",
+            "stages": [TOOL.stage("identity", TOOL.IDENTITY_FIELDS)],
+        }
+        with self.assertRaisesRegex(
+            TOOL.PlanFailure, "without a prior effective FF record"
+        ):
+            TOOL.build_operations(
+                profile, {}, {"registers": {}}, first_row=300, boundary=488
+            )
+        with self.assertRaisesRegex(
+            TOOL.PlanFailure,
+            "chain 2 block 38 without a prior effective FF record",
+        ):
+            TOOL.build_operations(
+                profile, {(2, 37): 0x4184}, {"registers": {}},
+                first_row=300, boundary=488,
+            )
+
+    def test_dual_routes_label_two_ended_gen4_ladder_as_runtime_only(self):
+        projection = {
+            "memory": {
+                "defect_preserving_target_hbm_gib": 80,
+                "current_effective_hbm_gib": 64,
+                "density": {"gib_per_subpartition": 5},
+            },
+            "compute": {
+                "defect_preserving_target_sm": 124,
+                "post_target_reconfig_active_no_override_sm": 120,
+                "current_effective_sm": 104,
+            },
+        }
+        routes = TOOL.dual_path_plan_models(projection, [])
+        for route in routes:
+            step = next(
+                item for item in route["steps"]
+                if item["name"] == "isolated-permanent-pcie-gates"
+            )
+            ladder = step["experimental_runtime_ladder"]
+            self.assertIn("runtime bring-up evidence only", ladder["authority"])
+            self.assertIn("no fuse coordinate", ladder["authority"])
+            self.assertIn("reverse encoded", ladder["encoding"])
+            self.assertEqual(len(ladder["sequence"]), 5)
 
     def test_bundled_public_sources_and_audit_are_hash_bound(self):
         bundled = [ROOT / relative for relative in

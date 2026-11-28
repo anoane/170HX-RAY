@@ -70,7 +70,7 @@ from pathlib import Path
 
 
 TOOL_NAME = "170HX-XRAY"
-TOOL_VERSION = "4.3.0"
+TOOL_VERSION = "4.4.0"
 SCHEMA_VERSION = "170hx-xray-v1"
 # Immutable pre-migration artifacts remain valid inputs.  These constants are
 # input-only compatibility labels; XRAY never emits them.
@@ -894,6 +894,11 @@ CURATED_REGISTERS.extend([
          source="GA100 register specification", stability="snapshot"),
     _reg("FBPA_CFG1_BROADCAST", 0x009A0204, "hbm", "geometry_configuration",
          source="GA100 register specification", stability="snapshot"),
+    _reg("FBPA_CSTATUS_RAMAMOUNT_BROADCAST", 0x009A020C, "hbm", "capacity_liveness",
+         source="cmp170hx-ffcalc@e28e03a:ffcalc/data/ga100-fuses.json:98; docs/BURNING.md:126",
+         profile="hbm-static", stability="snapshot", aliases=["CSTATUS_RAMAMOUNT"],
+         identity_confidence_percent=95, interpretation_confidence_percent=65,
+         confidence_reason="broadcast address and observed value are current public evidence; it is a liveness/capacity correlate, not a standalone usable-memory proof"),
     _reg("FBPA_GENERIC_MRS", 0x009A0300, "hbm", "mode_register_latch",
          source="GA100 register specification", stability="snapshot"),
     _reg("FBPA_GENERIC_EMRS", 0x009A0304, "hbm", "mode_register_latch",
@@ -916,6 +921,17 @@ CURATED_REGISTERS.extend([
          source="GA100 register specification"),
     _reg("FBPA_TRAINING_STATUS", 0x009A0974, "hbm", "training_status",
          source="GA100 register specification", stability="volatile"),
+    _reg("FBPA_HBM_PLL_COEFF_MULTICAST", 0x0098BC98, "hbm", "clock_coefficient_observation",
+         source="cmp170hx-ffcalc@e28e03a:ffcalc/data/ga100-fuses.json:105; docs/BURNING.md:129",
+         profile="hbm-static", stability="volatile", aliases=["HBM_PLL_COEFF"],
+         identity_confidence_percent=95, interpretation_confidence_percent=70,
+         confidence_reason="current public loaded/idle observations support a runtime clock coefficient; no fuse-state meaning is claimed"),
+    _reg("FBPA_HBM_PLL_PRIV_LEVEL_MASK", 0x009A3C7C, "hbm", "privilege_mask_observation",
+         source="cmp170hx-ffcalc@e28e03a:ffcalc/data/ga100-fuses.json:104",
+         profile="hbm-static", stability="snapshot", aliases=["HBM_PLL_PLM"],
+         all_ones="valid", identity_confidence_percent=90,
+         interpretation_confidence_percent=55,
+         confidence_reason="current public map identifies a PLL privilege-mask observation; exact bit policy is not independently qualified"),
     _reg("I1500_INSTR", 0x009A3CB4, "hbm_i1500", "runtime_latch",
          source="GA100 register specification", stability="volatile"),
     _reg("I1500_MODE", 0x009A3CB8, "hbm_i1500", "runtime_latch",
@@ -931,6 +947,68 @@ CURATED_REGISTERS.extend([
     _reg("I1500_STATUS", 0x009A3CC8, "hbm_i1500", "runtime_status",
          source="GA100 register specification", stability="volatile"),
 ])
+
+# HBM power-management diagnostics imported from the pinned public
+# cmpunlocker map.  These are raw, pure-read observations only: the nearby
+# SET/CLEAR and transition registers remain outside every read allowlist.
+CURATED_REGISTERS.extend([
+    _reg("GSP_RISCV_STATUS", 0x00111240, "firmware_runtime", "riscv_status_observation",
+         source="cmpunlocker@8b6c556:common/constants.yaml:hbm_pm",
+         profile="hbm-static", stability="volatile",
+         identity_confidence_percent=95, interpretation_confidence_percent=70,
+         confidence_reason="current public hbm_pm map and independent public GA100 documentation agree on the address; values remain runtime state"),
+    _reg("FB_STOP_OUTPUT", 0x0010A7C0, "hbm_power", "stop_request_observation",
+         source="cmpunlocker@8b6c556:common/constants.yaml:hbm_pm",
+         profile="hbm-static", stability="volatile",
+         identity_confidence_percent=95, interpretation_confidence_percent=65,
+         confidence_reason="current public hbm_pm map exposes the request latch; reading it does not authorize writing the transition control"),
+    _reg("FB_STOP_INPUT", 0x0010A7C4, "hbm_power", "stop_ack_observation",
+         source="cmpunlocker@8b6c556:common/constants.yaml:hbm_pm",
+         profile="hbm-static", stability="volatile",
+         identity_confidence_percent=95, interpretation_confidence_percent=65,
+         confidence_reason="current public hbm_pm map exposes the acknowledgement latch; no transition write is included"),
+    _reg("PMU_IDLE_THRESHOLD", 0x0010BE00, "hbm_power", "idle_threshold_observation",
+         source="cmpunlocker@8b6c556:common/constants.yaml:hbm_pm",
+         profile="hbm-static", stability="volatile",
+         identity_confidence_percent=90, interpretation_confidence_percent=55,
+         confidence_reason="current public hbm_pm map; exact GA100 field layout and units are not qualified"),
+    _reg("PMU_IDLE_MASK0", 0x0010BE40, "hbm_power", "idle_mask_observation",
+         source="cmpunlocker@8b6c556:common/constants.yaml:hbm_pm",
+         profile="hbm-static", stability="volatile",
+         identity_confidence_percent=90, interpretation_confidence_percent=50,
+         confidence_reason="current public hbm_pm map; raw mask semantics only"),
+    _reg("PMU_IDLE_MASK1", 0x0010BE80, "hbm_power", "idle_mask_observation",
+         source="cmpunlocker@8b6c556:common/constants.yaml:hbm_pm",
+         profile="hbm-static", stability="volatile",
+         identity_confidence_percent=90, interpretation_confidence_percent=50,
+         confidence_reason="current public hbm_pm map; raw mask semantics only"),
+    _reg("PMU_IDLE_MASK2", 0x0010BEC0, "hbm_power", "idle_mask_observation",
+         source="cmpunlocker@8b6c556:common/constants.yaml:hbm_pm",
+         profile="hbm-static", stability="volatile",
+         identity_confidence_percent=90, interpretation_confidence_percent=50,
+         confidence_reason="current public hbm_pm map; raw mask semantics only"),
+    _reg("PMU_IDLE_COUNT", 0x0010BF80, "hbm_power", "idle_count_observation",
+         source="cmpunlocker@8b6c556:common/constants.yaml:hbm_pm",
+         profile="hbm-static", stability="volatile",
+         identity_confidence_percent=90, interpretation_confidence_percent=50,
+         confidence_reason="current public hbm_pm map; counter width, units and reset behavior are not qualified"),
+    _reg("PMU_IDLE_CONTROL", 0x0010BFC0, "hbm_power", "idle_control_observation",
+         source="cmpunlocker@8b6c556:common/constants.yaml:hbm_pm",
+         profile="hbm-static", stability="volatile",
+         identity_confidence_percent=90, interpretation_confidence_percent=45,
+         confidence_reason="current public hbm_pm map; read observation only and no control fields are decoded"),
+    _reg("HBM_PLL_CFG_MC2", 0x0098BC90, "hbm", "pll_configuration_observation",
+         source="cmpunlocker@8b6c556:common/constants.yaml:hbm_pm",
+         profile="hbm-static", stability="volatile",
+         identity_confidence_percent=90, interpretation_confidence_percent=50,
+         confidence_reason="current public hbm_pm map; DVFS-sensitive raw PLL configuration only"),
+    _reg("PRI_FENCE", 0x001211FC, "hbm_power", "pri_fence_observation",
+         source="cmpunlocker@8b6c556:common/constants.yaml:hbm_pm",
+         profile="hbm-static", stability="volatile",
+         identity_confidence_percent=95, interpretation_confidence_percent=55,
+         confidence_reason="current public hbm_pm map and older public driver implementations agree on the address; no fence write is authorized"),
+])
+
 
 # Complete targeted inventory from fuse-reference-table.md, corrected against
 # literal GA100 header identities where available.  Public aliases are retained
@@ -962,8 +1040,18 @@ CURATED_REGISTERS.extend([
     _reg("FBHUB_SYSMEM_HSHUB_CONNECTION_CFG", 0x00100B98, "memory_runtime", "routing_configuration",
          source="GA100 register specification", profile="fuse-reference", stability="snapshot",
          aliases=["FBHUB_HSHUB_SYS_CFG"]),
+    _reg("MMU_LOCAL_MEMORY_RANGE", 0x00100CE0, "memory_runtime", "local_memory_range_observation",
+         source="cmp170hx-ffcalc@e28e03a:ffcalc/data/ga100-fuses.json:99; field width remains unresolved",
+         profile="fuse-reference", stability="snapshot", aliases=["MMU_LMR"],
+         identity_confidence_percent=95, interpretation_confidence_percent=70,
+         confidence_reason="current public GA100 observation agrees on the address and 80-GiB specimen value; the exact field width is not independently qualified"),
     _reg("MMU_NUM_ACTIVE_LTCS", 0x00100EC0, "memory_runtime", "runtime_topology",
          source="GA100 register specification", profile="fuse-reference", stability="snapshot"),
+    _reg("GFW_BOOT_PROGRESS", 0x00118234, "firmware_runtime", "boot_progress_observation",
+         source="cmp170hx-ffcalc@e28e03a:ffcalc/data/ga100-fuses.json:101; docs/BURNING.md:127",
+         profile="fuse-reference", stability="volatile", aliases=["GFW_BOOT"],
+         identity_confidence_percent=95, interpretation_confidence_percent=60,
+         confidence_reason="address and completed-boot specimen value are public and current; upper-bit semantics and cross-platform terminal value are not qualified"),
     _reg("SKED_CG", 0x00407000, "graphics_runtime", "clock_gating_control",
          source="GA100 register specification", profile="fuse-reference",
          stability="volatile", aliases=["SKED_HW_BLK"], badf="availability"),
@@ -3326,8 +3414,29 @@ def normalize_ga100_topology(stable_values, gib_per_subpartition=None,
         all(layer["capacity_gib"] is not None for layer in memory_layers.values())
         and not half_nonzero
     )
+    supported_subpartition_counts = (16, 20, 24)
+    defect_enabled_subpartitions = memory_layers["defect"][
+        "enabled_subpartitions"
+    ]
+    supported_capacity_classes_gib = (
+        [
+            count * density_value
+            for count in supported_subpartition_counts
+        ]
+        if density_qualified else []
+    )
+    if (
+        defect_enabled_subpartitions is not None
+        and defect_enabled_subpartitions not in supported_subpartition_counts
+    ):
+        memory_violations.append(
+            "defect topology enables %d subpartitions; supported exact "
+            "capacity classes require 16, 20 or 24"
+            % defect_enabled_subpartitions
+        )
     target_admissible = bool(
         memory_layers["defect"]["capacity_gib"] is not None
+        and defect_enabled_subpartitions in supported_subpartition_counts
         and not any("defect mask is not a subset" in item for item in memory_violations)
         and not half_nonzero
     )
@@ -3378,6 +3487,15 @@ def normalize_ga100_topology(stable_values, gib_per_subpartition=None,
                 "subpartition_count": GA100_SUBPARTITION_COUNT,
                 "subpartitions_per_fbp": 2,
             },
+            "supported_exact_subpartition_counts": list(
+                supported_subpartition_counts
+            ),
+            "supported_exact_capacity_classes_gib": (
+                [
+                    int(value) if float(value).is_integer() else value
+                    for value in supported_capacity_classes_gib
+                ]
+            ),
             "layers": memory_layers,
             "capacity_exact": capacity_exact,
             "target_admissible": target_admissible,
@@ -4174,7 +4292,7 @@ def _helper_software_iff_provenance(dump):
     }
 
 
-def attach_atomic_helper_dumps(captured, helper, card, args):
+def attach_serialized_helper_dumps(captured, helper, card, args):
     bdf = card["domain_bdf"]
     main_dump = helper.dump(
         bdf, XRAY_DUMP_MAIN, allow_bound=args.allow_bound_controller
@@ -4196,7 +4314,7 @@ def attach_atomic_helper_dumps(captured, helper, card, args):
             "IFF interval is certified only as a locked, software-redirection-excluded "
             "controller view and is not immutable-OTP evidence across unlike planes"
         ),
-        "collector": "170hx_xray atomic kernel helper ABI %d" % XRAY_HELPER_ABI,
+        "collector": "170hx_xray serialized kernel helper ABI %d" % XRAY_HELPER_ABI,
         "rows": main_dump["passes"][0] if main_dump["passes"] else None,
         "passes": main_dump["passes"],
         "pass_hashes": main_dump["pass_hashes"],
@@ -4204,7 +4322,8 @@ def attach_atomic_helper_dumps(captured, helper, card, args):
         "transaction": main_dump,
         "certification": {
             "available": main_available,
-            "same_atomic_helper_transaction_per_pass": True,
+            "two_passes_in_one_helper_serialized_ioctl_transaction": True,
+            "hardware_atomic_snapshot": False,
             "full_domain_identity_bound": True,
             "driver_unbound": not main_dump["driver_bound_at_entry"],
             "software_iff_redirection_excluded": sw_iff_provenance[
@@ -4272,7 +4391,7 @@ def attach_atomic_helper_dumps(captured, helper, card, args):
     rir_available = _helper_dump_available(rir_dump)
     captured["rir_rows"] = {
         "available": rir_available,
-        "collector": "170hx_xray atomic kernel helper ABI %d" % XRAY_HELPER_ABI,
+        "collector": "170hx_xray serialized kernel helper ABI %d" % XRAY_HELPER_ABI,
         "rows": rir_dump["passes"][0] if rir_dump["passes"] else None,
         "passes": rir_dump["passes"],
         "pass_hashes": rir_dump["pass_hashes"],
@@ -4280,7 +4399,8 @@ def attach_atomic_helper_dumps(captured, helper, card, args):
         "transaction": rir_dump,
         "certification": {
             "available": rir_available,
-            "same_atomic_helper_transaction_per_pass": True,
+            "two_passes_in_one_helper_serialized_ioctl_transaction": True,
+            "hardware_atomic_snapshot": False,
             "full_domain_identity_bound": True,
             "driver_unbound": (
                 None if rir_dump["driver_bound_at_entry"] is None
@@ -4453,7 +4573,7 @@ def command_live(args):
         fallback_reasons.append("owner declared active GPU workloads")
     if controller_snapshot_requested and not helper_backend_selected:
         fallback_reasons.append(
-            "backend %s cannot perform atomic MAIN/RIR controller transactions"
+            "backend %s cannot perform complete helper-serialized MAIN/RIR controller transactions"
             % args.backend
         )
     bound_targets = [
@@ -4769,13 +4889,13 @@ def command_live(args):
             ):
                 helper_transaction_attempted = True
                 try:
-                    helper_transaction = attach_atomic_helper_dumps(
+                    helper_transaction = attach_serialized_helper_dumps(
                         captured, xray_helper, card, args
                     )
                 except (OSError, AuditError, ValueError) as exc:
                     helper_transaction_error = "%s: %s" % (type(exc).__name__, exc)
                     captured["capture"].setdefault("warnings", []).append(
-                        "atomic MAIN/RIR transaction failed before a complete journal: %s: %s"
+                        "helper-serialized MAIN/RIR transaction failed before a complete journal: %s: %s"
                         % (type(exc).__name__, exc)
                     )
             driver_queries = {}
@@ -5219,7 +5339,7 @@ def command_schema(args):
             "default_requested": True,
             "meaning": (
                 "bar-read plus controller state writes whose only purpose is a read; "
-                "requires exclusive unbound maintenance and atomic helper"
+                "requires exclusive unbound maintenance and a helper-serialized ioctl"
             ),
             "bound_or_busy_behavior": (
                 "automatic downgrade to bar-read, or passive when owner is declared busy"
@@ -5248,10 +5368,10 @@ def command_schema(args):
         },
         "otp-write": {
             "meaning": (
-                "irreversible OTP policy level; only sealed-manifest-v2 blank-FF "
+                "irreversible OTP policy level; only sealed-manifest-v3 blank-FF "
                 "append is implemented, while legacy plan-v1 remains refusal-only"
             ),
-            "otp_execution_supported": "experimental-v2-blank-FF-append-only",
+            "otp_execution_supported": "experimental-v3-blank-FF-append-only",
             "generic_fuse_or_mmio_write_supported": False,
             "persistence_claimed": "only after fresh physical readback and cold validation",
             "dsov_requirement": (
@@ -5283,7 +5403,7 @@ def command_schema(args):
                 "FUSEADDR/FUSECTRL.CMD_READ and masked DEBUGCTRL.RWL only"
             ),
             "physical_rows_available": (
-                "conditional on successful exclusive atomic helper certification"
+                "conditional on successful exclusive helper-serialized certification"
             ),
             "metadata_only_fallback": True,
             "minimum_passes": 2,
@@ -5315,10 +5435,10 @@ def command_schema(args):
             "manifest_integrity_required": True,
             "interactive_confirmation_on_explicit_execute_request": True,
             "execution_backend": (
-                "legacy v1: unavailable/EOPNOTSUPP; v2: experimental "
+                "legacy v1: unavailable/EOPNOTSUPP; v3: experimental "
                 "hash-sealed GA100 blank-FF append"
             ),
-            "live_write_primitive": "manifest-only-v2; no generic address/value API",
+            "live_write_primitive": "manifest-only-v3; no generic address/value API",
         },
     }
     document["curated_live_registry"] = curated_registry_schema()
@@ -8118,10 +8238,31 @@ def verify_native_capture_attestation(capture, selected_metadata, kind,
     if not isinstance(certification, dict):
         errors.append("native outer certification is absent")
         certification = {}
-    for key in ("available", "same_atomic_helper_transaction_per_pass",
-                "full_domain_identity_bound"):
+    serialized_transaction = certification.get(
+        "two_passes_in_one_helper_serialized_ioctl_transaction"
+    )
+    if serialized_transaction is None:
+        # Compatibility only for retained ABI-5/early ABI-6 evidence.  The
+        # deprecated spelling never meant a hardware-atomic snapshot.
+        serialized_transaction = certification.get(
+            "same_atomic_helper_transaction_per_pass"
+        )
+    for key in ("available", "full_domain_identity_bound"):
         if certification.get(key) is not True:
             errors.append("native certification %s is not true" % key)
+    if serialized_transaction is not True:
+        errors.append(
+            "native certification lacks one helper-serialized ioctl transaction per pass"
+        )
+    if (
+        "two_passes_in_one_helper_serialized_ioctl_transaction" in certification
+        and certification.get("hardware_atomic_snapshot") is not False
+    ):
+        errors.append(
+            "current native certification must explicitly deny hardware atomicity"
+        )
+    elif certification.get("hardware_atomic_snapshot") is True:
+        errors.append("legacy native certification claims hardware atomicity")
     if certification.get("driver_unbound") is not True:
         errors.append("native certification does not prove driver-unbound capture")
 
@@ -10504,7 +10645,7 @@ def build_goal_plan(goal_name, evidence, planning_model="evidence-only"):
         "no hash-bound complete old/new 512-row image exists",
         (
             "the built-in planner emits non-executable plan-v1 evidence; it does "
-            "not produce or authorize the separately sealed v2 append manifest"
+            "not produce or authorize the separately sealed v3 append manifest"
         ),
     ]
     if not evidence["capture_coherent"]:
@@ -10959,9 +11100,16 @@ def command_full_write(args):
         )
     except (OSError, UnicodeError, ValueError) as exc:
         raise AuditError("cannot inspect full-write manifest: %s" % exc) from exc
-    if isinstance(dispatch_root, dict) and dispatch_root.get("schema") == (
-        "170hx-xray-otp-sealed-manifest-v2"
-    ):
+    dispatch_schema = (
+        dispatch_root.get("schema") if isinstance(dispatch_root, dict) else None
+    )
+    if dispatch_schema == "170hx-xray-otp-sealed-manifest-v2":
+        raise AuditError(
+            "sealed-manifest-v2 is retired after incompatible armed-image and "
+            "backend-version hardening; recompile the unchanged candidate with "
+            "the v3 compiler and obtain a new review receipt"
+        )
+    if dispatch_schema == "170hx-xray-otp-sealed-manifest-v3":
         return _command_vfi_append_full_write(args)
     canonical_access = canonical_access_mode(args.access)
     if canonical_access != "otp-write":
@@ -11111,7 +11259,7 @@ def _load_vfi_append_backend():
 def _command_vfi_append_full_write(args):
     backend = _load_vfi_append_backend()
     if args.backend not in ("auto", backend.BACKEND_ID):
-        raise AuditError("v2 manifest requires --backend %s" % backend.BACKEND_ID)
+        raise AuditError("v3 manifest requires --backend %s" % backend.BACKEND_ID)
     if args.execute and args.live_preflight:
         raise AuditError("--execute and --live-preflight are mutually exclusive")
     try:
@@ -11123,7 +11271,7 @@ def _command_vfi_append_full_write(args):
         raise AuditError("VFI append manifest refused: %s" % exc) from exc
     if args.execute and args.write_strategy is None:
         raise AuditError(
-            "v2 execution requires explicit --write-strategy; there is no default"
+            "v3 execution requires explicit --write-strategy; there is no default"
         )
     if args.write_strategy is not None:
         try:
@@ -11137,7 +11285,7 @@ def _command_vfi_append_full_write(args):
         "access_aliases": dict(ACCESS_ALIASES),
         "generic_live_write_primitive": False,
         "sealed_vfi_append_execution_supported": True,
-        "otp_execution_supported": "experimental-v2-blank-FF-append-only",
+        "otp_execution_supported": "experimental-v3-blank-FF-append-only",
         "direct_user_mmio_writes": (
             "zero during offline validation/preflight; exact sealed setup and "
             "per-row programming writes only after --execute authorization"
@@ -11150,7 +11298,7 @@ def _command_vfi_append_full_write(args):
             "arbitrary address/value MMIO", "unsealed row or payload",
             "automatic OTP retry/resume", "software-IFF load", "GPU reset",
         ],
-        "mode_gated_v2_actions": [
+        "mode_gated_v3_actions": [
             "read-only fuse timing snapshot", "sealed FUSEWDATA",
             "sealed FUSECTRL.CMD_WRITE", "bounded sense/readback",
         ],
@@ -11158,11 +11306,15 @@ def _command_vfi_append_full_write(args):
     base["artifact_schema"] = "170hx-xray-vfi-append-result-v1"
     base["backend"] = {
         "id": backend.BACKEND_ID,
+        "version": backend.BACKEND_VERSION,
         "module_sha256": sha256_file(str(Path(backend.__file__).resolve())),
         "scope": "verified-blank GA100 FF-row append only",
         "generic_mmio_write_interface": False,
         "gpio19_used": False,
         "write_strategies": list(backend.WRITE_STRATEGIES),
+        "transaction_trace_strategies": list(
+            backend.TRANSACTION_TRACE_STRATEGIES
+        ),
         "write_strategy_selected": args.write_strategy,
         "implicit_write_strategy": False,
     }
@@ -11178,10 +11330,10 @@ def _command_vfi_append_full_write(args):
     }
     base["transaction_traces"] = {
         strategy: backend.transaction_trace(validated, strategy)
-        for strategy in backend.WRITE_STRATEGIES
+        for strategy in backend.TRANSACTION_TRACE_STRATEGIES
     }
     if not args.execute and not args.live_preflight:
-        base["status"] = "OFFLINE_V2_VALIDATED"
+        base["status"] = "OFFLINE_V3_VALIDATED"
         base["execution"] = {
             "requested": False,
             "experimental_backend_implemented": True,
@@ -11203,7 +11355,7 @@ def _command_vfi_append_full_write(args):
             ("--held-state-capture", args.held_state_capture),
         ):
             if not value:
-                raise AuditError("v2 execution requires %s" % name)
+                raise AuditError("v3 execution requires %s" % name)
         try:
             receipt = backend.load_and_validate_receipt(args.receipt, validated)
             authorization = backend.perform_runtime_confirmations(
@@ -13963,7 +14115,7 @@ def _self_test_helper_protocol():
 
     failed_helper = FailedMainHelper()
     capture = {"goal_assessments": {}}
-    attach_atomic_helper_dumps(
+    attach_serialized_helper_dumps(
         capture, failed_helper, {"domain_bdf": "0000:01:00.0"},
         argparse.Namespace(
             allow_bound_controller=False, fuseless_start=None,
@@ -14056,7 +14208,8 @@ def _self_test_native_capture_attestation():
             "transaction": transaction,
             "certification": {
                 "available": True,
-                "same_atomic_helper_transaction_per_pass": True,
+                "two_passes_in_one_helper_serialized_ioctl_transaction": True,
+                "hardware_atomic_snapshot": False,
                 "full_domain_identity_bound": True,
                 "driver_unbound": True,
                 "software_iff_redirection_excluded": True,
@@ -14165,12 +14318,12 @@ def command_self_test(args):
         "complete generated GA100 shadow manifest inventory",
     )
     _check(
-        len(registers_for_profile("core")) == 209
-        and len(registers_for_profile("fuse-reference")) == 250
-        and len(registers_for_profile("shadow-full")) == 874
-        and len(registers_for_profile("hbm-static")) == 322
-        and len(registers_for_profile("hbm-i1500-latches")) == 442
-        and len(registers_for_profile("all-safe")) == 1066,
+        len(registers_for_profile("core")) == 211
+        and len(registers_for_profile("fuse-reference")) == 254
+        and len(registers_for_profile("shadow-full")) == 878
+        and len(registers_for_profile("hbm-static")) == 340
+        and len(registers_for_profile("hbm-i1500-latches")) == 460
+        and len(registers_for_profile("all-safe")) == 1084,
         "register profile boundaries and optional full-shadow surface",
     )
     _check(
@@ -14187,15 +14340,15 @@ def command_self_test(args):
     )
     provenance_census = registry_provenance_census()
     _check(
-        provenance_census["catalogued_unique_addresses"] == 1091
-        and provenance_census["safe_unique_addresses"] == 1066
+        provenance_census["catalogued_unique_addresses"] == 1109
+        and provenance_census["safe_unique_addresses"] == 1084
         and provenance_census["stateful_or_unsafe_entries"] == 25
-        and provenance_census["safe_with_fields"] == 86
-        and provenance_census["safe_raw_word_only"] == 980
-        and len(provenance_census["missing_interpretation_confidence"]) == 461
+        and provenance_census["safe_with_fields"] == 92
+        and provenance_census["safe_raw_word_only"] == 992
+        and len(provenance_census["missing_interpretation_confidence"]) == 463
         and not provenance_census["missing_identity_confidence"]
         and not provenance_census["missing_source_anchor"]
-        and len(provenance_census["generic_source_anchor"]) == 60
+        and len(provenance_census["generic_source_anchor"]) == 56
         and not provenance_census["completeness"]["specific_source_anchor_complete"]
         and not provenance_census["planning_enabled_entries"],
         "register provenance/confidence census",
@@ -14669,12 +14822,12 @@ def build_parser():
         "full-write",
         help=(
             "inspect legacy readiness or run the separately gated experimental "
-            "VFI blank-FF append v2 backend"
+            "VFI blank-FF append v3 backend"
         ),
     )
     full_write.add_argument(
         "manifest",
-        help="legacy XRAY plan-v1 or VFI append sealed-manifest-v2 JSON",
+        help="legacy XRAY plan-v1 or VFI append sealed-manifest-v3 JSON",
     )
     full_write.add_argument(
         "--access", choices=("otp-write", "full-write"), default="otp-write",
@@ -14683,7 +14836,7 @@ def build_parser():
     full_write.add_argument(
         "--execute", action="store_true",
         help=(
-            "v1: confirmation-only refusal; v2: enter the experimental live "
+            "v1: confirmation-only refusal; v3: enter the experimental live "
             "executor after receipt and exact interactive confirmations"
         ),
     )
@@ -14696,33 +14849,33 @@ def build_parser():
         choices=("public-direct-compat", "evidence-led-guarded"),
         default=None,
         help=(
-            "explicit v2 transaction lifecycle; mandatory with --execute, "
+            "explicit v3 transaction lifecycle; mandatory with --execute, "
             "never inferred from the manifest"
         ),
     )
-    full_write.add_argument("--bdf", default=None, help="exact v2 target BDF")
+    full_write.add_argument("--bdf", default=None, help="exact v3 target BDF")
     full_write.add_argument(
-        "--profile", default=None, help="exact v2 profile ID",
+        "--profile", default=None, help="exact v3 profile ID",
     )
     full_write.add_argument(
         "--receipt", default=None,
-        help="v2 experimental review receipt bound to the manifest",
+        help="v3 experimental review receipt bound to the manifest",
     )
     full_write.add_argument(
         "--journal", default=None,
-        help="new create-only v2 journal path; filename must start with BDF",
+        help="new create-only v3 journal path; filename must start with BDF",
     )
     full_write.add_argument(
         "--held-state-capture", default=None,
         help=(
             "fresh absolute native XRAY JSON from the exact current DSOV=0 "
-            "window; mandatory only for v2 --execute"
+            "window; mandatory only for v3 --execute"
         ),
     )
     full_write.add_argument(
         "--sysfs-root", default=DEFAULT_SYSFS_ROOT,
         help=(
-            "PCI sysfs root for v2 preflight/testing; irreversible execution "
+            "PCI sysfs root for v3 preflight/testing; irreversible execution "
             "requires the canonical /sys/bus/pci/devices root"
         ),
     )
@@ -14789,7 +14942,10 @@ def build_parser():
     )
     full_dump.add_argument(
         "--controller-helper", default=DEFAULT_XRAY_HELPER,
-        help="atomic helper path (default: /dev/170hx_xray); never built or loaded",
+        help=(
+            "helper-serialized controller path (default: /dev/170hx_xray); "
+            "never built or loaded"
+        ),
     )
     full_dump.add_argument(
         "--allow-bound-controller", action="store_true",

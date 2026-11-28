@@ -7,7 +7,7 @@ program that image.
 The core `170HX-XRAY.py plan` command emits no physical operations. The separate workspace
 companion `tools/170hx_candidate_plan.py` can emit non-empty offline candidate operations,
 but has no MMIO backend, controller-write primitive or apply mode. Every
-candidate remains `executable=false`. A separate v2 compiler may transform only
+candidate remains `executable=false`. A separate v3 compiler may transform only
 independently provable append operations into a distinct sealed manifest; that
 does not reinterpret or execute the candidate itself.
 
@@ -28,13 +28,15 @@ artifact with a different model identifier and source lineage.
 ## Current companion output
 
 The current planner source uses schema `170hx-xray-candidate-plan-v1` and emits
-18 profiles per specimen. Twelve are operational/offline candidate models:
+24 profiles per specimen. Twelve are operational/offline candidate models:
 isolated HBM, SM, the combined common permanent topology foundation, an
 explicit global-IOCTRL-group comparison, two PCIe policies, identity,
 experimental SYS_PIPE, the defect-gated MIG/NVDEC/NVJPG/OFA profile, two
-corrected-public intents, and a staged XRAY-best A100-conversion intent. Six
+corrected-public intents, and a staged XRAY-best A100-conversion intent. Twelve
 more are zero-operation review-only profiles for SS0 IFF, SS1 IFF, DP and ECC
-conventional bits, unsupported NVENC, and unknown-map per-link NVLink. It binds complete
+conventional bits, unsupported NVENC, unknown-map per-link NVLink, reported
+per-specimen RECONFIG and speed-select FF records, and proposed conventional
+row-remapper, VGX, OpenGL and TTU coordinates. It binds complete
 old/proposed MAIN and RIR images, every `n+1` prefix, active-IFF preservation,
 recovery records, field evidence, and blockers. The execution-input candidate
 must bind MAIN, RIR, identity, and ordinary register context to one native
@@ -45,11 +47,11 @@ four specimens, eleven profiles per specimen, and candidate SHA-256
 `21716beb9b9b9cb85e55a8f3078ee9c66dc5a843b995e0c26abe6ce92388ed9a`.
 It was regenerated from the immutable legacy ABI-5 capture through explicit
 read-only normalization and emits XRAY schemas and profile names. It must not be
-relabeled as current 18-profile output. The RAY 3.7.0 and earlier v3.6.1
+relabeled as current 24-profile output. The RAY 3.7.0 and earlier v3.6.1
 artifacts remain historical evidence. A current execution candidate is always
 regenerated from a new exact-current same-session Level-3 capture.
 
-The 18 research profiles are not 18 execution profiles. The v2 compiler and
+The 24 research profiles are not 24 execution profiles. The v3 compiler and
 runtime independently admit only seven field/stage sets: `specimen-80gb-hbm`
 (historical model ID; `specimen-hbm-to-defect-ceiling` is the accurate CLI alias),
 `specimen-more-sm`, `xray-common-permanent-topology`, `specimen-pcie-gen4-isolated`,
@@ -58,8 +60,11 @@ runtime independently admit only seven field/stage sets: `specimen-80gb-hbm`
 `execution_authorized=false`. The identity profile forbids a test-row-only run
 and an optional first-row pause and requires a minimum two-operation commit
 group. The media profile preserves direct defect bits, orders SYS_PIPE before
-NVDEC, and treats candidate bits 146 and 371 as one inseparable two-operation
-commit because their individual NVJPG/OFA attribution is unresolved. The
+NVDEC, and treats candidate bits 146 and 371 as one inseparable logical intent
+because their individual NVJPG/OFA attribution is unresolved. Hardware still
+receives two sequential row appends: the first creates an unavoidable
+asymmetric prefix. Inseparability is a planner constraint, not hardware
+atomicity. The
 three-bit global IOCTRL-group candidate is review-only and is not the unknown
 12-bit per-link map. A complete four-card current matrix therefore contains 28
 independently compiled manifests. The 32-manifest count belongs only to the
@@ -119,8 +124,8 @@ authorized to program OTP.
 | `OPT_SM_SPEED_SELECT_DP_CONTROL` | Conventional primary/redundant rows 6/7 bit 27 | 65% proposed undo/control semantics | `review-dp-conventional` | Rejected; adjacent name is known but undo behavior lacks isolated cold proof |
 | `OPT_SW_SMC_DISABLE` | Conventional primary/redundant rows 14/15 bit 11 | 99% coordinate; MIG sufficiency unproved | Frontend/MIG evidence only; no candidate operation | Rejected; no conventional-fuse or complete MIG model |
 | `OPT_NVDEC_DISABLE` | FF C1 bits 139–143, width 5 | 90% | Direct `OPT_NVDEC_DEFECTIVE`; experimental media prerequisite | Eligible only in the experimental media/MIG profile |
-| `NVJPG_OFA_DISABLE_CANDIDATE_BIT146` | FF C1 bit 146 | 88% set mapping; 0% individual attribution | Must change with bit 371; both direct defect words must be zero | Eligible only as one inseparable two-operation experimental pair |
-| `NVJPG_OFA_DISABLE_CANDIDATE_BIT371` | FF C1 bit 371 | 88% set mapping; 0% individual attribution | Must change with bit 146; both direct defect words must be zero | Eligible only as one inseparable two-operation experimental pair |
+| `NVJPG_OFA_DISABLE_CANDIDATE_BIT146` | FF C1 bit 146 | 88% set mapping; 0% individual attribution | Must change with bit 371; both direct defect words must be zero | One inseparable logical intent, emitted as sequential appends with an asymmetric prefix |
+| `NVJPG_OFA_DISABLE_CANDIDATE_BIT371` | FF C1 bit 371 | 88% set mapping; 0% individual attribution | Must change with bit 146; both direct defect words must be zero | One inseparable logical intent, emitted as sequential appends with an asymmetric prefix |
 | `OPT_NVJPG_DISABLE` | Direct width 1; physical coordinate unknown; candidate set `{146,371}` | 0% individual; 88% set mapping | Observation alias only, never an individual candidate | Rejected individually |
 | `OPT_NVENC_DISABLE` | Direct width 2; physical FF coordinate unknown | 0% physical coordinate and supported target | `review-nvenc-unsupported` plus option/CP/control/defect/status/PTOP inventory | Rejected; no populated-engine evidence or defensible target |
 | `OPT_OFA_DISABLE` | Direct width 1; physical coordinate unknown; candidate set `{146,371}` | 0% individual; 88% set mapping | Observation alias only, never an individual candidate | Rejected individually |
@@ -309,11 +314,20 @@ produce non-empty proposed operations, but:
 - `executable` remains false;
 - `apply` and the legacy v1 `full-write` path remain incapable of MMIO or OTP
   programming;
-- only a separately compiled `170hx-xray-otp-sealed-manifest-v2` can reach the
+- only a separately compiled `170hx-xray-otp-sealed-manifest-v3` can reach the
   narrow experimental blank-FF append backend; and
 - no candidate plan by itself authorizes glitching, voltage changes, reset,
-  VBIOS flashing, or fuse writes. V2 additionally requires exact live gates, a
+  VBIOS flashing, or fuse writes. V3 additionally requires exact live gates, a
   reviewed receipt, controlling-TTY confirmation, a fresh same-function native
   DSOV=0 held-state capture, conditional EFP0-SENSE/EFP1-skip behavior, a
-  two-pass armed-plane binding, two full expected-image passes after every row,
+  helper-serialized (explicitly not hardware-atomic) double-pass capture, exact
+  equality of both complete armed 512-row images to the held-state image, two
+  full expected-image passes after every row,
   durable journaling, and native post-cold capture verification.
+
+The v3 backend remains an experimental userspace `resource0` mmap transport.
+Its PCI ownership sentinel, resource-inode binding and immediate pre-command
+re-attestation do not atomically close the bind/remove TOCTOU; only a reviewed
+kernel-owned irreversible transaction boundary could close that gap. The
+`inert-then-arm-experimental-trace-only` two-pulse model is emitted for offline
+review only and is excluded from both executable strategies and authorization.

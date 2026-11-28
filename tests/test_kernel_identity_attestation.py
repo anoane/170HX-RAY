@@ -207,13 +207,39 @@ class KernelIdentityAttestationTests(unittest.TestCase):
             restore_body.index("xray_wr(card, XRAY_FUSEADDR"),
         )
 
+    def test_every_uncertain_controller_read_path_poison_quarantines(self):
+        body = function_body(self.source, "xray_run_dump")
+        rir_latch = re.search(
+            r"if\s*\(xray_rd\(card, XRAY_DEBUGCTRL\)[\s\S]*?"
+            r"ret\s*=\s*-EIO\s*;[\s\S]*?"
+            r"force_poison\s*=\s*true\s*;[\s\S]*?goto\s+restore\s*;",
+            body,
+        )
+        self.assertIsNotNone(rir_latch)
+        read_failure = re.search(
+            r"ret\s*=\s*xray_read_one\([\s\S]*?"
+            r"if\s*\(ret\)\s*\{[\s\S]*?"
+            r"force_poison\s*=\s*true\s*;[\s\S]*?"
+            r"goto\s+failed_row\s*;",
+            body,
+        )
+        self.assertIsNotNone(read_failure)
+        incoherent = re.search(
+            r"if\s*\(!dump->coherent\)\s*\{[\s\S]*?"
+            r"ret\s*=\s*-EILSEQ\s*;[\s\S]*?"
+            r"force_poison\s*=\s*true\s*;",
+            body,
+        )
+        self.assertIsNotNone(incoherent)
+        self.assertIn("module reload does not prove cold recovery", self.source)
+
     def test_abi6_identity_and_config_offset_are_compile_time_locked(self):
         self.assertRegex(
             self.uapi, r"(?m)^#define\s+XRAY_ABI_VERSION\s+6U$"
         )
         self.assertEqual(len(re.findall(r"^#define XRAY_IOC_", self.uapi, re.M)), 5)
         self.assertIn("BUILD_BUG_ON(PCI_VENDOR_ID != 0x00)", self.source)
-        self.assertIn('MODULE_VERSION("4.1.0")', self.source)
+        self.assertIn('MODULE_VERSION("4.2.0")', self.source)
         self.assertIn(
             "READ_ONCE(card->pdev->dev.power.runtime_status)", self.source
         )

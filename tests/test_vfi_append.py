@@ -25,8 +25,10 @@ from unittest import mock
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 ROOT = PACKAGE_ROOT.parent
 BACKEND_PATH = PACKAGE_ROOT / "otp_vfi_append.py"
+MAIN_PATH = PACKAGE_ROOT / "170HX-XRAY.py"
 COMPILER_PATH = PACKAGE_ROOT / "tools" / "170hx_vfi_append_manifest.py"
 CANDIDATE_PLANNER_PATH = PACKAGE_ROOT / "tools" / "170hx_candidate_plan.py"
+RELEASE_BUNDLE_PATH = PACKAGE_ROOT / "tools" / "170hx_full_release_bundle.py"
 CANDIDATE = (
     ROOT / "research-evidence" /
     "170hx-ray-specimen-plans-exact-current-level3-native-v3.7.0-r2-2026-11-23.json"
@@ -65,6 +67,9 @@ BACKEND = load_module("xray_vfi_append_test_target", BACKEND_PATH)
 COMPILER = load_module("xray_vfi_append_compiler_test_target", COMPILER_PATH)
 CANDIDATE_PLANNER = load_module(
     "xray_vfi_append_candidate_planner_test_target", CANDIDATE_PLANNER_PATH
+)
+RELEASE_BUNDLE = load_module(
+    "xray_full_release_bundle_test_target", RELEASE_BUNDLE_PATH
 )
 
 
@@ -264,6 +269,149 @@ class MemoryJournal(object):
         return record
 
 
+class CompilerPolicyUnitTests(unittest.TestCase):
+    def test_release_manifest_filename_contract_is_canonical(self):
+        key = ("0000:01:00.0", "specimen-more-sm")
+        self.assertEqual(
+            RELEASE_BUNDLE._canonical_manifest_filename(key),
+            "0000-01-00-0__specimen-more-sm.json",
+        )
+        self.assertEqual(
+            RELEASE_BUNDLE._require_canonical_manifest_filename(
+                Path("0000-01-00-0__specimen-more-sm.json"), key
+            ),
+            "0000-01-00-0__specimen-more-sm.json",
+        )
+        with self.assertRaisesRegex(
+            RELEASE_BUNDLE.BundleError, "filename is not canonical"
+        ):
+            RELEASE_BUNDLE._require_canonical_manifest_filename(
+                Path("0000-01-00-0--specimen-more-sm.json"), key
+            )
+        source = RELEASE_BUNDLE_PATH.read_text(encoding="utf-8")
+        self.assertIn("manifest filename is not canonical", source)
+        self.assertNotIn(
+            '/ "sealed-v3-manifests" / source.name', source
+        )
+
+    """Compiler gates that must run even without private retained evidence."""
+
+    def test_compiler_aliases_resolve_or_are_explicitly_rejected(self):
+        self.assertEqual(
+            BACKEND.MANIFEST_SCHEMA,
+            "170hx-xray-otp-sealed-manifest-v3",
+        )
+        self.assertTrue(all(
+            target in COMPILER.APPROVED_PROFILES
+            for target in COMPILER.PROFILE_ALIASES.values()
+        ))
+        for rejected in (
+            "ray-best-evidence-a100-conversion",
+            "xray-best-evidence-a100-conversion",
+        ):
+            with self.subTest(rejected=rejected):
+                self.assertIn(rejected, COMPILER.REJECTED_PROFILE_ALIASES)
+                with self.assertRaisesRegex(
+                        COMPILER.CompileError, "separate eligible sessions"):
+                    COMPILER.build_manifest(
+                        Path("unused-candidate.json"), BDF, rejected,
+                        Path("unused-main.bin"), Path("unused-rir.bin"),
+                    )
+
+    def test_compiler_refuses_dynamic_ff_row_above_runtime_ceiling(self):
+        with tempfile.TemporaryDirectory() as directory:
+            candidate_path = write_json(directory, "candidate.json", {})
+            synthetic = {
+                "operation_rows": [BACKEND.COMPARE_LAST + 1],
+            }
+            with mock.patch.object(
+                    COMPILER.OLD_SPEC, "validate_candidate_profile",
+                    return_value=synthetic):
+                with self.assertRaisesRegex(
+                        COMPILER.CompileError, "runtime execution domain"):
+                    COMPILER.build_manifest(
+                        candidate_path, BDF, PROFILE,
+                        Path(directory) / "unused-main.bin",
+                        Path(directory) / "unused-rir.bin",
+                    )
+
+    def test_legacy_atomic_claim_cannot_be_normalized_away(self):
+        with self.assertRaisesRegex(
+                COMPILER.CompileError, "claiming hardware atomicity"):
+            COMPILER._normalize_legacy_capture({
+                "same_atomic_helper_transaction_per_pass": True,
+                "hardware_atomic_snapshot": True,
+            })
+        normalized = COMPILER._normalize_legacy_capture({
+            "same_atomic_helper_transaction_per_pass": True,
+        })
+        self.assertTrue(
+            normalized[
+                "two_passes_in_one_helper_serialized_ioctl_transaction"
+            ]
+        )
+        self.assertFalse(normalized["hardware_atomic_snapshot"])
+
+    def test_serialized_helper_certification_is_fail_closed(self):
+        current = "two_passes_in_one_helper_serialized_ioctl_transaction"
+        self.assertFalse(BACKEND._serialized_helper_certification({
+            current: True,
+        }))
+        self.assertFalse(BACKEND._serialized_helper_certification({
+            current: True,
+            "hardware_atomic_snapshot": True,
+        }))
+        self.assertTrue(BACKEND._serialized_helper_certification({
+            current: True,
+            "hardware_atomic_snapshot": False,
+        }))
+        self.assertFalse(BACKEND._serialized_helper_certification({
+            "same_atomic_helper_transaction_per_pass": True,
+            "hardware_atomic_snapshot": True,
+        }))
+
+    def test_live_policy_field_set_is_exact(self):
+        policy = copy.deepcopy(BACKEND.EXPECTED_LIVE_POLICY)
+        BACKEND._require_exact_policy(
+            policy, BACKEND.EXPECTED_LIVE_POLICY, "live_policy"
+        )
+        policy["unreviewed_extension"] = True
+        with self.assertRaisesRegex(
+                BACKEND.VfiAppendError, "field set differs"):
+            BACKEND._require_exact_policy(
+                policy, BACKEND.EXPECTED_LIVE_POLICY, "live_policy"
+            )
+
+    def test_v3_dispatcher_has_no_current_v2_status_or_gate_labels(self):
+        source = MAIN_PATH.read_text(encoding="utf-8")
+        self.assertIn("sealed-manifest-v2 is retired", source)
+        self.assertIn('"mode_gated_v3_actions"', source)
+        self.assertIn('"OFFLINE_V3_VALIDATED"', source)
+        self.assertIn("manifest-only-v3", source)
+        for stale in (
+            "v2 execution requires",
+            '"mode_gated_v2_actions"',
+            '"OFFLINE_V2_VALIDATED"',
+            "manifest-only-v2",
+            "v2: experimental hash-sealed",
+        ):
+            self.assertNotIn(stale, source)
+
+        compiler_source = COMPILER_PATH.read_text(encoding="utf-8")
+        self.assertIn('"status": "v3_manifest_written"', compiler_source)
+        self.assertIn(
+            '"status": "valid_vfi_append_v3_manifest"', compiler_source
+        )
+        self.assertNotIn("v2_manifest_written", compiler_source)
+        self.assertNotIn("valid_vfi_append_v2_manifest", compiler_source)
+
+        release_source = RELEASE_BUNDLE_PATH.read_text(encoding="utf-8")
+        self.assertIn('"sealed_v3_manifests"', release_source)
+        self.assertIn('"sealed_v3_manifest_set"', release_source)
+        self.assertNotIn("sealed_v2_manifests", release_source)
+        self.assertNotIn("sealed_v2_manifest_set", release_source)
+
+
 @unittest.skipUnless(
     EXTERNAL_EVIDENCE_AVAILABLE,
     "retained hardware/candidate evidence is outside the source release",
@@ -418,7 +566,7 @@ class ManifestValidationTests(unittest.TestCase):
                         transaction, "main_ff", 512, words, identity
                     )
 
-    def test_cross_date_level2_candidate_cannot_compile_executable_v2(self):
+    def test_cross_date_level2_candidate_cannot_compile_executable_v3(self):
         with self.assertRaises(COMPILER.CompileError):
             COMPILER.build_manifest(
                 CROSS_DATE_CANDIDATE, BDF, PROFILE, COLD_MAIN, COLD_RIR,
@@ -793,6 +941,47 @@ class SessionTests(unittest.TestCase):
             self.assertEqual(len(trace["row_operations"]),
                              len(self.validated["operations"]))
 
+    def test_two_step_strategy_is_trace_only_and_expands_each_row(self):
+        strategy = BACKEND.STRATEGY_INERT_THEN_ARM_TRACE
+        self.assertIn(strategy, BACKEND.TRANSACTION_TRACE_STRATEGIES)
+        self.assertNotIn(strategy, BACKEND.WRITE_STRATEGIES)
+        trace = BACKEND.transaction_trace(self.validated, strategy)
+        self.assertFalse(trace["execution_performed"])
+        self.assertFalse(trace["execution_eligible"])
+        loop = "\n".join(trace["program_loop"])
+        self.assertIn("program chain-zero inert word exactly once", loop)
+        self.assertIn("program only the sealed one-hot chain delta", loop)
+        self.assertNotIn("FUSEWDATA <- sealed complete FF word", loop)
+        self.assertEqual(
+            len(trace["two_step_row_operations"]),
+            len(self.validated["operations"]),
+        )
+        for source, expanded in zip(
+                self.validated["operations"],
+                trace["two_step_row_operations"]):
+            word = source["word"]
+            self.assertEqual(
+                expanded["step_a_inert_word"],
+                "0x%08x" % (word & ~0x1F),
+            )
+            self.assertEqual(expanded["step_b_armed_word"], "0x%08x" % word)
+            self.assertTrue(expanded["chain_is_supported_one_hot"])
+        with self.assertRaises(BACKEND.VfiAppendError):
+            BACKEND.validate_write_strategy(strategy)
+
+    def test_every_trace_discloses_unclosed_userspace_ownership_race(self):
+        for strategy in BACKEND.TRANSACTION_TRACE_STRATEGIES:
+            trace = BACKEND.transaction_trace(self.validated, strategy)
+            ownership = trace["ownership_model"]
+            self.assertEqual(ownership["transport"], "userspace resource0 mmap")
+            self.assertFalse(ownership["kernel_owned_irreversible_transaction"])
+            self.assertFalse(ownership["bind_remove_toctou_closed"])
+        phrase = BACKEND.confirmation_contract(
+            self.validated,
+            BACKEND.STRATEGY_EVIDENCE_GUARDED,
+        )["risk_phrase"]
+        self.assertIn("USERSPACE OWNERSHIP RACE UNRESOLVED", phrase)
+
     def test_run_live_execution_refuses_implicit_strategy_before_device_access(self):
         with self.assertRaisesRegex(BACKEND.VfiAppendError, "explicitly selected"):
             BACKEND.run_live(
@@ -800,25 +989,26 @@ class SessionTests(unittest.TestCase):
                 sysfs_root=Path(self.directory.name) / "must-not-open",
             )
 
-    def test_armed_plane_suffix_is_rebound_before_first_program(self):
-        class PlaneChangingBar(FakeBar):
-            def write32(inner_self, offset, value):
-                super(PlaneChangingBar, inner_self).write32(offset, value)
-                if offset == BACKEND.EN_SW_OVERRIDE and value == 1:
-                    # Row 489 is payload for the two-row opcode at 488.
-                    inner_self.rows[489] ^= 0x00010000
+    def test_armed_plane_suffix_change_refuses_before_first_program(self):
+        for changed_row in (0, 488, 489, 511):
+            with self.subTest(changed_row=changed_row):
+                class PlaneChangingBar(FakeBar):
+                    def write32(self, offset, value):
+                        super().write32(offset, value)
+                        if offset == BACKEND.EN_SW_OVERRIDE and value == 1:
+                            self.rows[changed_row] ^= 0x00010000
 
-        bar = PlaneChangingBar(self.validated["baseline"])
-        old_suffix = BACKEND._packed_sha256(self.validated["baseline"][488:])
-        _bar, session = self.session(bar)
-        report = session.run(execute=True, test_row_only=True)
-        armed = report["armed_runtime_baseline"]
-        self.assertNotEqual(
-            armed["capture"]["ff_iff_structure"]["suffix_u32le_sha256"],
-            old_suffix,
-        )
-        self.assertEqual(session.runtime_baseline[489], bar.rows[489])
-        self.assertEqual(session.program_commands, 1)
+                bar = PlaneChangingBar(self.validated["baseline"])
+                _bar, session = self.session(bar)
+                with self.assertRaisesRegex(
+                        BACKEND.VfiAppendError,
+                        "complete expected 512-row image"):
+                    session.run(execute=True, test_row_only=True)
+                self.assertEqual(session.program_commands, 0)
+                self.assertEqual(
+                    session.runtime_baseline[changed_row],
+                    self.validated["baseline"][changed_row],
+                )
 
     def test_identity_profile_forbids_test_row_stop_and_has_no_pause(self):
         validated = copy.deepcopy(self.validated)
@@ -1297,10 +1487,10 @@ class ReceiptAuthorizationJournalTests(unittest.TestCase):
         )
 
         class SetupFailBar(FakeBar):
-            def write32(inner_self, offset, value):
+            def write32(self, offset, value):
                 if offset == BACKEND.EN_SW_OVERRIDE:
                     raise OSError("synthetic EN write failure")
-                return super(SetupFailBar, inner_self).write32(offset, value)
+                return super().write32(offset, value)
 
         state_root = Path(self.directory.name) / "canonical-state"
         state_root.mkdir(mode=0o700)

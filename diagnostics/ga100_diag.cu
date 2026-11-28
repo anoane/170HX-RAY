@@ -71,6 +71,23 @@ struct TelemetrySample {
     bool utilization_valid;
 };
 
+static bool query_gpu_temperature(nvmlDevice_t device, unsigned int *value) {
+#if defined(NVML_API_VERSION) && NVML_API_VERSION >= 13
+    nvmlTemperature_t temperature{};
+    temperature.version = nvmlTemperature_v1;
+    temperature.sensorType = NVML_TEMPERATURE_GPU;
+    if (nvmlDeviceGetTemperatureV(device, &temperature) != NVML_SUCCESS ||
+        temperature.temperature < 0) {
+        return false;
+    }
+    *value = static_cast<unsigned int>(temperature.temperature);
+    return true;
+#else
+    return nvmlDeviceGetTemperature(device, NVML_TEMPERATURE_GPU, value)
+           == NVML_SUCCESS;
+#endif
+}
+
 class NvmlSampler {
 public:
     explicit NvmlSampler(int cuda_device)
@@ -138,10 +155,8 @@ private:
             nvmlDeviceGetClockInfo(handle_, NVML_CLOCK_MEM, &sample.memory_mhz)
             == NVML_SUCCESS
         );
-        sample.temperature_valid = (
-            nvmlDeviceGetTemperature(
-                handle_, NVML_TEMPERATURE_GPU, &sample.temperature_c
-            ) == NVML_SUCCESS
+        sample.temperature_valid = query_gpu_temperature(
+            handle_, &sample.temperature_c
         );
         nvmlUtilization_t util{};
         if (nvmlDeviceGetUtilizationRates(handle_, &util) == NVML_SUCCESS) {

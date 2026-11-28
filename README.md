@@ -50,15 +50,16 @@ its checked-in lock.
 170HX-XRAY is an evidence-oriented GA100/CMP 170HX observer, physical-row
 collector, FF/IFF/RIR decoder, and fail-closed planning tool. It is intended to
 answer *what this exact card contains* before anyone proposes an irreversible
-change. It is not a turnkey unlock recipe. Version 4.3.0 retains one deliberately
+change. It is not a turnkey unlock recipe. Version 4.4.0 retains one deliberately
 narrow experimental fuse backend: it can append only a reviewed, hash-sealed
 record to a verified blank GA100 FF row. It is not a generic fuse/MMIO writer.
 
-The current tool is version 4.3.0. Its Python entry point is
+The current tool is version 4.4.0. Its Python entry point is
 [`170HX-XRAY.py`](./170HX-XRAY.py), and its integrated Linux observation helper is
-version 4.1.0 with native LP64 ABI 6 in [`kernel/`](./kernel/). Helper 4.1.0 is
-a read-surface revision: it adds the allowlisted NVENC inventory/control
-observations at `0x2244c` and `0x820968` without changing ABI 6. Retained
+version 4.2.0 with native LP64 ABI 6 in [`kernel/`](./kernel/). Helper 4.2.0
+adds sixteen raw pure-read runtime observations, expands only the fixed READ32
+allowlist, and poisons the controller path after every uncertain latch/read or
+double-pass disagreement; it does not add an OTP surface. Retained
 captures that attest helper 4.0.0 remain historical 4.0.0 artifacts. The dedicated
 fixed-operation thermal helper is version 1.5.1 with native LP64 ABI 5. XRAY accepts the
 immutable RAY 3.6.1/3.7.0 capture and full-dump envelopes only through explicit
@@ -75,14 +76,21 @@ from [anoane/archbench](https://github.com/anoane/archbench). It is offered unde
 `build/bin/archbench_sm80` automatically. The exact URL, commit and tree are
 locked in [`docs/ARCHBENCH_SUBMODULE_LOCK.json`](./docs/ARCHBENCH_SUBMODULE_LOCK.json). The
 report verifies the initialized checkout against that lock before execution.
+Full-report 0.8 additionally verifies all 104 reviewed paths, executable-mode
+classifications and SHA-256 values against
+[`docs/ARCHBENCH_TRACKED_SHA256SUMS`](./docs/ARCHBENCH_TRACKED_SHA256SUMS),
+then binds the submodule's origin URL, commit and Git tree. Untracked build
+output is not mistaken for reviewed source.
 `--archbench-root` selects a separately reviewed tree and automatically derives
 its `build/bin/archbench_sm80`; `--archbench-binary` overrides that worker path.
 
 The maintainers retain a complete four-card validated demonstration report,
 but it is deliberately not distributed in this source repository: it contains
 host/card inventory, raw fuse images, candidate artifacts and command logs.
-The [release-validation ledger](./docs/RELEASE_VALIDATION_2026-11-26.md)
-records its bounded historical result without republishing the private capture.
+The [historical release-validation ledger](./docs/RELEASE_VALIDATION_2026-11-26.md)
+records its bounded result without republishing the private capture. Current
+4.4.0 source admission is in the
+[2026-11-28 release-validation ledger](./docs/RELEASE_VALIDATION_2026-11-28.md).
 Generate a new specimen-local report with `full-report` or
 `full-report-bench`; generated `reports/` content is ignored by Git.
 
@@ -133,7 +141,7 @@ only a hash-bound, non-executable plan skeleton. `apply --execute` is always
 refused.
 Legacy `170hx-xray-otp-sealed-manifest-v1` input to `full-write` remains an
 `EOPNOTSUPP` readiness/refusal path. A distinct
-`170hx-xray-otp-sealed-manifest-v2` can enter the experimental VFI blank-FF
+`170hx-xray-otp-sealed-manifest-v3` can enter the experimental VFI blank-FF
 append backend. That path requires exact-current same-capture Level-3 evidence,
 independent last-record-wins and defect replay, a separately reviewed receipt,
 an exact `20c2` BDF/PCI tuple, canonical root-owned journal registry, a live
@@ -141,7 +149,13 @@ DSOV=0/CRC=0x55 gate, `EN_SW_OVERRIDE=0` at entry, two exact 512-row passes,
 interactive authorization, a fresh native DSOV=0 held-state capture, an
 armed-plane recapture, a one-shot test row for non-identity profiles (or the
 sealed two-row identity commit group), per-command durable journal, and
-independent native cold MAIN/RIR verification. No volatile-write executor exists.
+independent native cold MAIN/RIR verification. The live backend is version
+1.1.0 and still uses userspace `resource0` mmap: the exact tuple, resource
+inode, private process lock, `driver_override` sentinel and immediate
+pre-command re-attestation reduce but cannot atomically close the kernel
+bind/remove race. It remains experimental and unqualified until a separately
+reviewed kernel transaction ABI owns the irreversible boundary. No
+volatile-write executor exists.
 
 A separate workspace companion, `tools/170hx_candidate_plan.py`, now emits
 non-empty, specimen-bound **candidate** images for research comparison. It keeps
@@ -156,8 +170,8 @@ The transaction contract, review gates, journal states, and host-only fault
 simulations are specified in
 [`docs/OTP_EXECUTOR_SAFETY_SPEC.md`](./docs/OTP_EXECUTOR_SAFETY_SPEC.md). The
 workspace CLI `tools/170hx_otp_executor_spec.py` preserves the older inert v1
-oracle. The v2 compiler/reviewer/cold verifier is
-`tools/170hx_vfi_append_manifest.py`; the only live v2 transport is the
+oracle. The v3 compiler/reviewer/cold verifier is
+`tools/170hx_vfi_append_manifest.py`; the only live v3 transport is the
 allowlisted `otp_vfi_append.py` backend shipped beside XRAY.
 
 The public-source faithful/corrected comparison profiles additionally require
@@ -203,7 +217,7 @@ used as an `--access` value. An alias does not add a capability.
 | 3 | Semantic read | Writes `FUSEADDR`, issues `CMD_READ`, and temporarily sets RIR `DEBUGCTRL.RWL`; captures two passes and restores checked entry state. These are semantically reads but operationally include MMIO writes. | Implemented through the integrated helper. The supported/default posture is an exclusively owned, NVIDIA-driver-unbound card. |
 | 4 | Offline plan | Reads an existing artifact, compares explicitly selected evidence models, and emits a hash-bound report with zero operations. | Implemented by `plan --access plan`; it performs no live device access and never imports an external plan as authority. |
 | 5 | Volatile write | Would alter software override, software-IFF RAM/window state, or other live configuration without burning OTP. | Named policy level only. Capture downgrades to observation; `apply` is offline dry-run. No volatile executor exists. |
-| 6 | OTP/full write | Irreversibly changes storage. | Experimental v2 supports only controller-internal append to verified blank main-array FF rows in a held VFI window. Legacy v1, occupied rows, FPF, IFF, RIR, keys, arbitrary MMIO, GPIO, timing setters, and automatic retry/resume remain refused. The observation kernel module still has no programming ABI. |
+| 6 | OTP/full write | Irreversibly changes storage. | Experimental v3 supports only controller-internal append to verified blank main-array FF rows in a held VFI window. Retired v2, legacy v1, occupied rows, FPF, IFF, RIR, keys, arbitrary MMIO, GPIO, timing setters, and automatic retry/resume remain refused. The observation kernel module still has no programming ABI. |
 
 The current CLI selectors mean:
 
@@ -217,7 +231,7 @@ The current CLI selectors mean:
 - `--access volatile-write`: name Level 5, but capture downgrades to the highest
   safe observation level and `apply` remains offline-only;
 - `--access otp-write`: name Level 6; capture still downgrades; `full-write` keeps v1
-  readiness/refusal and accepts only the separately compiled v2 blank-FF
+  readiness/refusal and accepts only the separately compiled v3 blank-FF
   manifest for experimental execution.
 
 `read-write` and `full-write` remain accepted as the legacy access aliases
@@ -283,13 +297,13 @@ kernel-version-specific.
 Before live use, run:
 
 ```sh
-python3 170HX-XRAY/170HX-XRAY.py self-test --output xray-self-test.json
+python3 ./170HX-XRAY.py self-test --output xray-self-test.json
 ```
 
 Run the separate registry/ABI/access regression suite as well:
 
 ```sh
-python3 -m unittest discover -s 170HX-XRAY/tests -p 'test_*.py' -v
+python3 -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
 This suite locks the Python/kernel allowlist, supported read identities, ABI and
@@ -297,7 +311,7 @@ ioctl constants, the absence of programming ioctls, controller-write targets,
 provenance census, fail-closed header-conflict behavior, and no-backend fallback
 for every access-level name. It is offline and does not touch a GPU.
 The current results and remaining hardware gaps are recorded in the
-[current release-validation ledger](./docs/RELEASE_VALIDATION_2026-11-26.md).
+[current release-validation ledger](./docs/RELEASE_VALIDATION_2026-11-28.md).
 The [legacy registry/access hardening report](docs/PROVENANCE.md#workspace-only-evidence)
 remains historical acquisition provenance.
 
@@ -306,11 +320,11 @@ an existing artifact. Choose a new filename for every acquisition.
 
 ### Self-contained package layout
 
-The normal research edition now bundles the same reviewed companion CLIs used
-by the workspace-level examples:
+Each packaged edition includes the same reviewed companion CLIs used by the
+repository-root examples:
 
 ```text
-170HX-XRAY/
+repository-root/
   170HX-XRAY.py
   otp_vfi_append.py
   kernel/
@@ -322,22 +336,22 @@ by the workspace-level examples:
     170hx_full_release_bundle.py
 ```
 
-Commands written as `python3 tools/TOOL.py` assume the workspace root and use
-its byte-identical companion copy. For a standalone `170HX-XRAY` directory,
-either run from inside that directory with the same spelling or, from its
-parent, use `python3 170HX-XRAY/tools/TOOL.py`. The bundled planner and complete-
+Commands written as `python3 tools/TOOL.py` assume the repository root and use
+its byte-identical companion copy. Either run from inside the clone with that
+spelling or, from its parent, use
+`python3 <clone-directory>/tools/TOOL.py`. The bundled planner and complete-
 release packager resolve the adjacent package frontend first, so they cannot
 silently select a sibling edition.
 
 ## Build and load the observation helper
 
-From the workspace root:
+From the repository root:
 
 ```sh
-make -C 170HX-XRAY/kernel
-sudo insmod 170HX-XRAY/kernel/170hx_xray.ko \
+make -C kernel
+sudo insmod kernel/170hx_xray.ko \
   allow_bound_controller=0 allow_bound_read32=1 allow_a100_controller=0
-sudo python3 170HX-XRAY/170HX-XRAY.py helper-info \
+sudo python3 ./170HX-XRAY.py helper-info \
   --controller-helper /dev/170hx_xray \
   --output xray-helper-info.json
 ```
@@ -377,7 +391,8 @@ adds:
 - the correct PCI 64-bit memory-BAR type check and real resource-length checks;
 - full PCI domain:BDF plus vendor/device/subsystem/revision identity;
 - host-visible PCI config dword-0 attestation against both cached and
-  map-frozen vendor/device at mapping, inventory and every MMIO boundary;
+  map-frozen vendor/device at mapping, inventory and every ioctl MMIO
+  transaction boundary;
 - generation-bound requests so stale indices cannot silently select a card;
 - exact GA100/CMP device and read-offset allowlists;
 - `CAP_SYS_RAWIO`, exclusive open, per-card serialization, and nonblocking PCI
@@ -391,13 +406,15 @@ adds:
 - bounded controller polling with no retry after an uncertain failure;
 - a separate bounded cleanup-idle poll that issues no restoration write until
   an interrupted/timed-out controller is proven idle;
-- two atomic 512-row MAIN passes and two atomic eight-word RIR passes;
+- two complete helper-serialized 512-row MAIN passes and two complete
+  helper-serialized eight-word RIR passes in one ioctl transaction;
 - entry/exit controller, IFF, CRC, security-status, and privilege snapshots;
 - exact `FUSEADDR` and RIR-RWL restoration checks;
 - a preserved first poison-causing journal; and
 - a poisoned-card state after a timeout/restoration/context failure, which
-  prevents further transactions until an operator investigates and reloads the
-  module.
+  prevents further controller-DUMP transactions until an operator investigates
+  and reloads the module. Forensic INFO/LAST and allowlisted READ32 observations
+  remain available; READ32 does not issue a fuse-controller command.
 
 Every DUMP response is initialized in-kernel; a caller cannot preseed counters,
 snapshots, words, restore flags, or the retained journal. XRAY ABI 6 is native
@@ -421,8 +438,10 @@ treated as proof that a unit is healthy or safe to enable.
 The topology analysis also keeps HBM architecture, defect, programmed-disable
 and effective-status capacity separate. For the Hynix 8-GB CMP geometry it
 admits an exact 64/80/96-GiB class only when each 12-bit FBP mask expands to the
-same paired 24-bit FBPA, FBIO and ROP/L2 masks. Missing or mismatched planes
-produce `unknown`, not an optimistic target. On the four retained cards the
+same paired 24-bit FBPA, FBIO and ROP/L2 masks. Other internally consistent
+counts, including 18/22 subpartitions (72/88 GiB at 4 GiB per subpartition),
+remain diagnostic and are refused as planner targets. Missing or mismatched
+planes produce `unknown`, not an optimistic target. On the four retained cards the
 result is 64 GiB current/disable and 80 GiB defect-preserving; their SM layers
 are 74 current/disable and 112/124/124/126 defect ceilings. The architectural
 96 GiB and 128 SM values are maxima, not specimen health guarantees.
@@ -433,7 +452,7 @@ artifacts remain stable. The model ID never forces an 80-GiB target.
 
 ## Capture workflows
 
-All commands below assume the workspace root as the current directory.
+All commands below assume the repository root as the current directory.
 
 ### 1. Metadata-only capture
 
@@ -441,7 +460,7 @@ This is the narrowest implemented live path. It does not open a raw BAR helper
 and does not invoke NVML or `nvidia-smi`:
 
 ```sh
-python3 170HX-XRAY/170HX-XRAY.py capture \
+python3 ./170HX-XRAY.py capture \
   --access passive \
   --backend metadata \
   --no-driver-queries \
@@ -457,7 +476,7 @@ With the integrated helper loaded, this collects the curated register set but
 does not issue a fuse-controller command:
 
 ```sh
-sudo python3 170HX-XRAY/170HX-XRAY.py capture \
+sudo python3 ./170HX-XRAY.py capture \
   --access bar-read \
   --backend xray-helper \
   --controller-helper /dev/170hx_xray \
@@ -466,7 +485,7 @@ sudo python3 170HX-XRAY/170HX-XRAY.py capture \
 ```
 
 This issues zero device-MMIO writes, but it is still direct MMIO observation of
-live hardware. The XRAY 4.1.0 ABI-6 helper takes a non-waking runtime-PM
+live hardware. The XRAY 4.2.0 ABI-6 helper takes a non-waking runtime-PM
 reference in kernel software so the mapping cannot become suspended during a
 read; it never wakes an inactive device. Current source additionally uses
 `READ_ONCE()` for the informational runtime-status sample. Inspect the
@@ -477,12 +496,12 @@ power state, and coherence fields instead of relying on the filename.
 
 | Profile | Unique addresses | Boundary |
 |---|---:|---|
-| `core` | 209 | Stable controller/topology/feature observations used by ordinary captures. |
-| `fuse-reference` | 250 | Adds every safe address from the retained GA100 fuse-reference table. |
-| `shadow-full` | 874 | Adds the complete safe GA100 shadow manifest; opt in because some availability responses are architecture/private-state dependent. |
-| `hbm-static` | 322 | Adds static HBM broadcast/unicast configuration and status observations. |
-| `hbm-i1500-latches` | 442 | Adds safe I1500 address/control/status/WDR latch observations. |
-| `all-safe` | 1,066 | Union of every known pure-read address in the registry. |
+| `core` | 211 | Stable controller/topology/feature observations used by ordinary captures. |
+| `fuse-reference` | 254 | Adds every safe address from the retained GA100 fuse-reference table plus raw MMU-range and GFW-boot observations. |
+| `shadow-full` | 878 | Adds the complete safe GA100 shadow manifest; opt in because some availability responses are architecture/private-state dependent. |
+| `hbm-static` | 340 | Adds HBM configuration plus raw runtime HBM power, PLL, GSP, stop-latch and PMU diagnostics; the profile name is retained for CLI compatibility. |
+| `hbm-i1500-latches` | 460 | Adds safe I1500 address/control/status/WDR latch observations. |
+| `all-safe` | 1,084 | Union of every known pure-read address in the registry. |
 
 The 25 stateful I1500 `DATA` ports are catalogued but excluded from all six
 profiles and from the kernel allowlist because reading them advances internal
@@ -500,7 +519,7 @@ controller commands and zero OTP commands. It did not replace the earlier
 certified MAIN/RIR controller captures. See the retained
 [legacy live-survey report](docs/PROVENANCE.md#workspace-only-evidence).
 
-### 3. Atomic MAIN and RIR capture, one card at a time
+### 3. Helper-serialized MAIN and RIR capture, one card at a time
 
 Level 3 changes controller state and is a maintenance operation. Unbinding a
 card interrupts all NVIDIA-driver use of that card. NVIDIA's remove path can
@@ -584,11 +603,11 @@ printf '%s\n' "$xray_target_bdf" | \
   sudo tee /sys/bus/pci/drivers/nvidia/unbind
 
 # Load the observation helper only after a clean, completed detach.
-sudo insmod 170HX-XRAY/kernel/170hx_xray.ko \
+sudo insmod kernel/170hx_xray.ko \
   allow_bound_controller=0 allow_bound_read32=0
 xray_helper_loaded=1
 
-sudo python3 170HX-XRAY/170HX-XRAY.py capture \
+sudo python3 ./170HX-XRAY.py capture \
   --access semantic-read \
   --backend xray-helper \
   --controller-helper /dev/170hx_xray \
@@ -651,7 +670,7 @@ not be used for the four-card survey or on an inference-active card.
 Generate the field/register schema:
 
 ```sh
-python3 170HX-XRAY/170HX-XRAY.py schema --output xray-schema.json
+python3 ./170HX-XRAY.py schema --output xray-schema.json
 ```
 
 When an explicitly supplied compatible GA100 register specification exists, it
@@ -662,7 +681,7 @@ Externally acquired rows can be decoded with explicit boundaries and
 provenance:
 
 ```sh
-python3 170HX-XRAY/170HX-XRAY.py analyze-rows input.json \
+python3 ./170HX-XRAY.py analyze-rows input.json \
   --card 0000:c1:00.0 \
   --fuseless-start START \
   --fuseless-end END \
@@ -685,7 +704,7 @@ reported as anomalous.
 Build a per-card, goal-specific evidence report:
 
 ```sh
-python3 170HX-XRAY/170HX-XRAY.py plan xray-capture.json \
+python3 ./170HX-XRAY.py plan xray-capture.json \
   --card 0000:c1:00.0 \
   --goal 80gb_hbm \
   --goal more_sms \
@@ -694,7 +713,7 @@ python3 170HX-XRAY/170HX-XRAY.py plan xray-capture.json \
   --reference-plan public-plan.json \
   --output xray-plan.json
 
-python3 170HX-XRAY/170HX-XRAY.py apply xray-plan.json \
+python3 ./170HX-XRAY.py apply xray-plan.json \
   --access volatile-write \
   --output xray-apply-dry-run.json
 ```
@@ -734,7 +753,7 @@ in every supplied static sample. The supplied `allspark.md` and its hosted
 copy are one secondary source, not two independent votes; their per-card row
 values, write sequence and broad feature claims are not programming authority.
 The SS0/SS1 pairs above are exposed only as catalog/public-model IFF candidates:
-they create no `physical_operations`, cannot enter the FF-only v2 append
+they create no `physical_operations`, cannot enter the FF-only v3 append
 backend, and do not promote conventional DP/ECC rows 6/7 into executable work.
 
 The four planning models are deliberately separate:
@@ -756,7 +775,7 @@ Physical operations remain empty under every model.
 Inspect the supported grammars and loss boundaries with:
 
 ```sh
-python3 170HX-XRAY/170HX-XRAY.py dump-formats --output xray-formats.json
+python3 ./170HX-XRAY.py dump-formats --output xray-formats.json
 ```
 
 `analyze-rows` and `convert-dump` accept strict XRAY, indexed text, Danylo JSONL,
@@ -802,7 +821,7 @@ never silently replaced with zero or copied from another GPU.
 Inspect the deliberately blocked legacy-v1 OTP-readiness state with:
 
 ```sh
-python3 170HX-XRAY/170HX-XRAY.py full-write xray-plan.json \
+python3 ./170HX-XRAY.py full-write xray-plan.json \
   --access otp-write \
   --output xray-full-write-readiness.json
 ```
@@ -813,26 +832,28 @@ blocker list, the required lifecycle, and zero-write counters. Adding
 plan-file hash, ordered target list, and operation count. Regardless of those
 answers, XRAY invokes no backend, writes no register, emits `EOPNOTSUPP`, and
 exits with status 3. The confirmation-only UX is testable scaffolding, not a
-way to authorize or perform OTP work. The distinct v2 workflow is documented
+way to authorize or perform OTP work. The distinct v3 workflow is documented
 below and never reinterprets a v1 file.
 
-## Experimental v2 blank-FF append lifecycle
+## Experimental v3 blank-FF append lifecycle
 
 This is the complete command surface for the implemented Level-6 backend. It
 does not make a card, manifest, or glitch state safe. Run one profile on one
 exact BDF at a time. Filenames below are examples; XRAY refuses to overwrite
 artifacts, journals, or bundles.
 
-The seven profile classes that currently survive the independent v2 compiler are
+The seven profile classes that currently survive the independent v3 compiler are
 `specimen-80gb-hbm` (historical ID; dynamically targets the specimen's 64/80/96-GiB defect ceiling), `specimen-more-sm`, `xray-common-permanent-topology`,
 `specimen-pcie-gen4-isolated`, `specimen-a100-20b5-identity`, the explicitly
 lower-confidence `specimen-sys-pipe-to-defect-experimental`, and the defect-gated
 `specimen-media-mig-to-defect-experimental`. The media profile orders SYS_PIPE
-before NVDEC and treats bits 146/371 as one inseparable NVJPG/OFA pair; it does
-not invent an NVENC coordinate. Composite/public
+before NVDEC and treats bits 146/371 as one inseparable logical NVJPG/OFA
+intent. The two physical row appends remain sequential, with an unavoidable
+asymmetric intermediate prefix; this is not hardware atomicity. It does not
+invent an NVENC coordinate. Composite/public
 profiles containing unexplained `WHOLE_WORD_EMPIRICAL` changes are deliberately
-rejected by v2 even though the candidate planner still emits them for
-comparison. Passing v2 proves internal consistency, not an official GA100
+rejected by v3 even though the candidate planner still emits them for
+comparison. Passing v3 proves internal consistency, not an official GA100
 descriptor or feature sufficiency.
 
 The retained XRAY 4.0.0 freeze contains four cards × eleven historical research
@@ -843,7 +864,7 @@ and four cards × seven then-admitted policies in the
 Those 28 historical manifests are offline-verified and explicitly unauthorized. They were
 regenerated from the immutable RAY ABI-5 capture through input-only
 normalization; the retained source bytes and digests were not rewritten. Current
-code emits 18 candidate profiles: twelve candidate-plan profiles and six
+code emits 24 candidate profiles: twelve candidate-plan profiles and twelve
 zero-operation review-only profiles. It admits seven compiler/runtime profile
 classes, so a fresh complete four-card matrix has 28 manifests and must be
 generated and verified from exact-current evidence rather than relabeling the
@@ -878,7 +899,7 @@ python3 tools/170hx_candidate_plan.py \
   --physical-capture /absolute/path/to/capture-bound-level3.json \
   --physical-card 0000:01:00.0 \
   --same-capture-context \
-  --xray 170HX-XRAY/170HX-XRAY.py \
+  --xray ./170HX-XRAY.py \
   --output candidate-capture-bound.json
 ```
 
@@ -886,7 +907,7 @@ For a multi-card artifact, repeat `--physical-capture` and
 `--physical-card` in matching order. To reduce review surface, add one or more
 `--profile PROFILE_ID` selectors. The candidate remains non-executable.
 
-### 2. Compile one v2 manifest
+### 2. Compile one v3 manifest
 
 The two binary inputs must be the exact 512-word MAIN and eight-word RIR images
 bound by the candidate. The compiler reopens and hashes the named capture,
@@ -898,22 +919,22 @@ one profile:
 python3 tools/170hx_vfi_append_manifest.py compile \
   --candidate candidate-capture-bound.json \
   --bdf 0000:01:00.0 \
-  --profile specimen-hbm-to-defect-ceiling \
+  --profile specimen-80gb-hbm \
   --cold-main /absolute/path/to/main-pass-001.raw-u32le.bin \
   --cold-rir /absolute/path/to/rir-pass-001.raw-u32le.bin \
-  --output 0000-01-00-0-80gb-v2.json
+  --output 0000-01-00-0__specimen-80gb-hbm.json
 
 python3 tools/170hx_vfi_append_manifest.py verify \
-  --manifest 0000-01-00-0-80gb-v2.json
+  --manifest 0000-01-00-0__specimen-80gb-hbm.json
 
-python3 170HX-XRAY/170HX-XRAY.py full-write \
-  0000-01-00-0-80gb-v2.json \
+python3 ./170HX-XRAY.py full-write \
+  0000-01-00-0__specimen-80gb-hbm.json \
   --bdf 0000:01:00.0 \
-  --profile specimen-hbm-to-defect-ceiling \
-  --output v2-offline-validation.json
+  --profile specimen-80gb-hbm \
+  --output v3-offline-validation.json
 ```
 
-The last command must say `OFFLINE_V2_VALIDATED` and perform no hardware access.
+The last command must say `OFFLINE_V3_VALIDATED` and perform no hardware access.
 It is useful as an independent dispatch/loader check.
 
 ### 3. Create and verify the review receipt
@@ -923,12 +944,12 @@ it is an experimental owner review, not a production signature:
 
 ```sh
 python3 tools/170hx_vfi_append_manifest.py review \
-  --manifest 0000-01-00-0-80gb-v2.json \
-  --output 0000-01-00-0-80gb-v2.review.json
+  --manifest 0000-01-00-0__specimen-80gb-hbm.json \
+  --output 0000-01-00-0__specimen-80gb-hbm.review.json
 
 python3 tools/170hx_vfi_append_manifest.py verify-receipt \
-  --manifest 0000-01-00-0-80gb-v2.json \
-  --receipt 0000-01-00-0-80gb-v2.review.json
+  --manifest 0000-01-00-0__specimen-80gb-hbm.json \
+  --receipt 0000-01-00-0__specimen-80gb-hbm.review.json
 ```
 
 Any manifest change invalidates the receipt. A self-hash is tamper evidence,
@@ -941,12 +962,12 @@ complete 512-row controller passes and checks every gate, but never sets
 `EN_SW_OVERRIDE`, never issues `SENSE`, and never issues `CMD_PROGRAM`:
 
 ```sh
-sudo python3 170HX-XRAY/170HX-XRAY.py full-write \
-  0000-01-00-0-80gb-v2.json \
+sudo python3 ./170HX-XRAY.py full-write \
+  0000-01-00-0__specimen-80gb-hbm.json \
   --live-preflight \
   --bdf 0000:01:00.0 \
-  --profile specimen-hbm-to-defect-ceiling \
-  --output v2-live-preflight.json
+  --profile specimen-80gb-hbm \
+  --output v3-live-preflight.json
 ```
 
 A normal locked card (`DSOV=1`) must refuse. A favorable glitch phenotype is
@@ -956,7 +977,9 @@ root-owned `/var/lib/170hx-xray/otp` registry. CLI options cannot redirect the
 lock, unresolved-journal scan, or boot evidence. Execution additionally requires
 the exact unbound function's `driver_override` to contain the ownership sentinel
 `170hx-xray-otp-lock`; that sentinel and the BAR resource identity are re-attested
-before every irreversible command.
+before every irreversible command. This is not kernel-owned exclusion: the
+typed risk phrase, transaction trace and compiled manifest explicitly retain
+the unresolved userspace ownership race.
 
 ### 4a. Choose and review the transaction strategy
 
@@ -984,6 +1007,14 @@ cadence only; it cannot change the sealed rows, words, fields, one-shot rule, or
 cold-verification requirement. The public-compatible order is not a safety
 recommendation.
 
+Offline output also includes
+`inert-then-arm-experimental-trace-only`, a non-executable review model of the
+new public two-step idea. It expands each FF row into a chain-zero inert word,
+an exact complete-image verification, and a separate chain-only activation
+word. It is absent from `WRITE_STRATEGIES` and the CLI execution choices
+because it doubles irreversible pulses and lacks independent electrical,
+per-substep journal/authorization, interruption and cold-recovery qualification.
+
 ### 5. Execute one test row (non-identity profiles only)
 
 The safest supported irreversible shape is one sealed row followed by a full
@@ -994,24 +1025,27 @@ BDF:
 ```sh
 sudo install -d -m 0700 /var/lib/170hx-xray/otp
 
-sudo python3 170HX-XRAY/170HX-XRAY.py full-write \
-  0000-01-00-0-80gb-v2.json \
+sudo python3 ./170HX-XRAY.py full-write \
+  0000-01-00-0__specimen-80gb-hbm.json \
   --execute \
   --test-row-only \
   --write-strategy evidence-led-guarded \
   --bdf 0000:01:00.0 \
-  --profile specimen-hbm-to-defect-ceiling \
-  --receipt 0000-01-00-0-80gb-v2.review.json \
+  --profile specimen-80gb-hbm \
+  --receipt 0000-01-00-0__specimen-80gb-hbm.review.json \
   --held-state-capture /absolute/path/to/fresh-held-dsov0-capture.json \
   --journal /var/lib/170hx-xray/otp/0000-01-00-0-session-001.jsonl \
-  --output v2-test-row-result.json
+  --output v3-test-row-result.json
 ```
 
 The held-state capture must be a fresh (at most 300 seconds old), native,
 helper-certified, two-pass Level-3 artifact from this exact `20c2` function and
 DSOV=0 window. Rows 0..487 must still equal the cold image, the live RIR must
-equal the sealed baseline, and rows 488..511 bind the state-qualified IFF
-suffix. The backend requires exact TTY confirmations. It rechecks the complete
+equal the sealed baseline, and rows 488..511 initially bind the held,
+state-qualified IFF suffix. After EN/SENSE setup, two complete MAIN passes must
+equal that held 512-word image exactly; any prefix, IFF header/payload or tail
+change stops before the first OTP command and quarantines the setup state. The
+backend requires exact TTY confirmations. It rechecks the complete
 gate set after every setup mutation. If initial `EFP_STATUS=0` it issues exactly
 one `CMD_SENSE`; if initial `EFP_STATUS=1` it must skip `SENSE`. It then captures
 and binds two complete armed-plane MAIN passes before the first program command,
@@ -1068,7 +1102,7 @@ signature.
 
 ```sh
 python3 tools/170hx_vfi_append_manifest.py cold-verify \
-  --manifest 0000-01-00-0-80gb-v2.json \
+  --manifest 0000-01-00-0__specimen-80gb-hbm.json \
   --journal /var/lib/170hx-xray/otp/0000-01-00-0-session-001.jsonl \
   --post-cold-capture /absolute/path/to/native-post-cold-level3.json \
   --power-attestation power-cycle-001.json \
@@ -1098,7 +1132,7 @@ profile-specific functional/stress plan before considering another row.
 - FUSERDATA is data: `0xffffffff` or a `BADx`-shaped word may be legitimate in
   a sealed row. Controller/address/gate poison is terminal, while row data is
   classified against the exact expected image.
-- The v2 backend starts only from an exact live `20c2`; an identity profile may
+- The v3 backend starts only from an exact live `20c2`; an identity profile may
   expect `20b5` after cold boot. Live `20b5` and `2080` controller capture
   remain separate specimen-validation gates.
 
@@ -1188,13 +1222,38 @@ bound by hash, but `full-dump` never imports or executes their code.
 To package the complete already-generated planning surface without weakening
 that acquisition boundary, use the separate hardware-inert
 `tools/170hx_full_release_bundle.py`. It verifies an existing full-dump, a
-current four-card × 18-profile candidate, and the complete four-card ×
-seven-profile sealed-v2 matrix. It then exports every proposed 512-row image as
+current four-card × 24-profile candidate, and the complete four-card ×
+seven-profile sealed-v3 matrix. It then exports all 96 proposed 512-row images as
 JSON, JSONL, indexed text and raw u32le, copies all 28 manifests, preserves all
 read transports, embeds the exact frontend/planner/compiler/validator/backend
 dependencies needed for semantic verification, and emits one strict index plus
-`SHA256SUMS`. Packager 0.3.0 verifies from those bundled dependencies after the
-directory is relocated; it never executes the planner or OTP backend:
+`SHA256SUMS`. Packager 0.6.0 verifies from those bundled dependencies after the
+directory is relocated; it never executes the planner or OTP backend.
+
+Every input manifest filename is part of the binding and must be exactly
+`<BDF-slug>__<canonical-profile>.json`, for example
+`0000-01-00-0__specimen-80gb-hbm.json`. The packager refuses an alias,
+single-hyphen separator, wrong BDF/profile pair, duplicate, or extra manifest
+before creating output:
+
+The manifest-set root is itself a sealed input. Put the 28 JSON files under a
+`manifests/` child and create the exact sorted checksum inventory shown here;
+the packager refuses a missing line, extra line, duplicate, malformed path or
+digest mismatch:
+
+```text
+verified-28-manifest-set/
+├── SHA256SUMS
+└── manifests/
+    ├── 0000-01-00-0__specimen-80gb-hbm.json
+    └── ... exactly 27 more canonical files
+```
+
+```sh
+(cd /absolute/path/to/verified-28-manifest-set && \
+  find manifests -maxdepth 1 -type f -name '*.json' -print0 | \
+  LC_ALL=C sort -z | xargs -0 shasum -a 256 > SHA256SUMS)
+```
 
 ```sh
 python3 tools/170hx_full_release_bundle.py build \
@@ -1279,7 +1338,7 @@ explicit.
 Package one retained XRAY capture with the default export safety policy:
 
 ```sh
-python3 170HX-XRAY/170HX-XRAY.py full-dump xray-bundle-001 \
+python3 ./170HX-XRAY.py full-dump xray-bundle-001 \
   --no-live-capture \
   --source retained-level3.json \
   --row-view locked_controller \
@@ -1290,7 +1349,7 @@ Package four one-card captures. They remain separate observations and receive
 deterministic specimen ordinals:
 
 ```sh
-python3 170HX-XRAY/170HX-XRAY.py full-dump xray-bundle-four-cards \
+python3 ./170HX-XRAY.py full-dump xray-bundle-four-cards \
   --no-live-capture \
   --source card-01.json \
   --source card-41.json \
@@ -1304,7 +1363,7 @@ projections. `START`/`END` must come from separately documented evidence; they
 are not recommended values and are not inferred by XRAY:
 
 ```sh
-python3 170HX-XRAY/170HX-XRAY.py full-dump xray-bundle-all-formats \
+python3 ./170HX-XRAY.py full-dump xray-bundle-all-formats \
   --no-live-capture \
   --source retained-level3.json \
   --include-unsafe-projections \
@@ -1317,7 +1376,7 @@ python3 170HX-XRAY/170HX-XRAY.py full-dump xray-bundle-all-formats \
 Package a standalone 512-word MAIN binary and a separate eight-word RIR binary:
 
 ```sh
-python3 170HX-XRAY/170HX-XRAY.py full-dump xray-bundle-raw \
+python3 ./170HX-XRAY.py full-dump xray-bundle-raw \
   --no-live-capture \
   --source main-u32le.bin \
   --input-format raw-u32le \
@@ -1330,7 +1389,7 @@ python3 170HX-XRAY/170HX-XRAY.py full-dump xray-bundle-raw \
 Bind, but do not execute, an external candidate planner and comparison plans:
 
 ```sh
-python3 170HX-XRAY/170HX-XRAY.py full-dump xray-bundle-bound \
+python3 ./170HX-XRAY.py full-dump xray-bundle-bound \
   --no-live-capture \
   --source retained-level3.json \
   --candidate-planner tools/170hx_candidate_plan.py \
@@ -1342,7 +1401,7 @@ When working in the research workspace, the explicit discovery flag can bind
 the adjacent candidate planner if present:
 
 ```sh
-python3 170HX-XRAY/170HX-XRAY.py full-dump xray-bundle-bound \
+python3 ./170HX-XRAY.py full-dump xray-bundle-bound \
   --no-live-capture \
   --source retained-level3.json \
   --bind-workspace-candidate
@@ -1351,7 +1410,7 @@ python3 170HX-XRAY/170HX-XRAY.py full-dump xray-bundle-bound \
 Restrict every plan model to selected goals:
 
 ```sh
-python3 170HX-XRAY/170HX-XRAY.py full-dump xray-bundle-sm-pcie \
+python3 ./170HX-XRAY.py full-dump xray-bundle-sm-pcie \
   --no-live-capture \
   --source retained-level3.json \
   --goal more_sms \
@@ -1364,7 +1423,7 @@ Metadata only, with driver queries disabled for the narrowest implemented live
 path:
 
 ```sh
-sudo python3 170HX-XRAY/170HX-XRAY.py full-dump xray-live-passive \
+sudo python3 ./170HX-XRAY.py full-dump xray-live-passive \
   --max-access passive \
   --backend metadata \
   --no-driver-queries
@@ -1373,7 +1432,7 @@ sudo python3 170HX-XRAY/170HX-XRAY.py full-dump xray-live-passive \
 Capture Level 1 and Level 2 separately, using the actual misc-device name:
 
 ```sh
-sudo python3 170HX-XRAY/170HX-XRAY.py full-dump xray-live-bar \
+sudo python3 ./170HX-XRAY.py full-dump xray-live-bar \
   --max-access bar-read \
   --backend xray-helper \
   --controller-helper /dev/170hx_xray \
@@ -1386,7 +1445,7 @@ On an exclusively owned, driver-unbound maintenance card, capture ordinary
 Levels 1, 2, and 3 as three independent observations:
 
 ```sh
-sudo python3 170HX-XRAY/170HX-XRAY.py full-dump xray-live-semantic \
+sudo python3 ./170HX-XRAY.py full-dump xray-live-semantic \
   --max-access semantic-read \
   --backend xray-helper \
   --controller-helper /dev/170hx_xray \
@@ -1404,7 +1463,7 @@ selected card proves the complete repeated-read qualification; it never reads
 MAIN/RIR and never claims the fuse-program gate is usable:
 
 ```sh
-sudo python3 170HX-XRAY/170HX-XRAY.py full-dump xray-live-glitch-window \
+sudo python3 ./170HX-XRAY.py full-dump xray-live-glitch-window \
   --level glitch-read \
   --backend xray-helper \
   --controller-helper /dev/170hx_xray \
@@ -1418,7 +1477,7 @@ sequential semantic Level-3 attempt. The sequence stops after the first uncertif
 transaction:
 
 ```sh
-sudo python3 170HX-XRAY/170HX-XRAY.py full-dump xray-live-four \
+sudo python3 ./170HX-XRAY.py full-dump xray-live-four \
   --max-access semantic-read \
   --backend xray-helper \
   --controller-helper /dev/170hx_xray \
@@ -1438,9 +1497,9 @@ explicit projection gate. The `222..511` interval below is the empirical bound
 for the retained four-card population, not an official GA100 descriptor:
 
 ```sh
-xray_source_sha=$(sha256sum 170HX-XRAY/170HX-XRAY.py | awk '{print $1}')
+xray_source_sha=$(sha256sum ./170HX-XRAY.py | awk '{print $1}')
 
-sudo python3 170HX-XRAY/170HX-XRAY.py full-dump xray-live-four-complete \
+sudo python3 ./170HX-XRAY.py full-dump xray-live-four-complete \
   --max-access semantic-read \
   --backend xray-helper \
   --controller-helper /dev/170hx_xray \
@@ -1465,7 +1524,7 @@ If workloads are active, declare that fact. A semantic request then records an
 owner-busy downgrade/refusal; it does not transact with the fuse controller:
 
 ```sh
-sudo python3 170HX-XRAY/170HX-XRAY.py full-dump xray-live-busy \
+sudo python3 ./170HX-XRAY.py full-dump xray-live-busy \
   --max-access semantic-read \
   --owner-busy \
   --backend xray-helper \
@@ -1483,7 +1542,7 @@ Verify hashes, the exact file set, index linkage, file modes, directory modes,
 and absence of symlinks:
 
 ```sh
-python3 170HX-XRAY/170HX-XRAY.py verify-full-dump xray-bundle-001 \
+python3 ./170HX-XRAY.py verify-full-dump xray-bundle-001 \
   --output xray-bundle-001-verification.json
 ```
 
@@ -1513,13 +1572,13 @@ PY
 Re-import one binary MAIN export and one RIR export through the strict parser:
 
 ```sh
-python3 170HX-XRAY/170HX-XRAY.py convert-dump \
+python3 ./170HX-XRAY.py convert-dump \
   xray-bundle-001/levels/imported-001/specimens/specimen-001/exports/main/pass-001/raw-u32le.bin \
   --input-format raw-u32le \
   --output-format xray-json \
   --output reimported-main.json
 
-python3 170HX-XRAY/170HX-XRAY.py analyze-rows \
+python3 ./170HX-XRAY.py analyze-rows \
   xray-bundle-001/levels/imported-001/specimens/specimen-001/exports/main/pass-001/raw-u32le.bin \
   --input-format raw-u32le \
   --rir-input xray-bundle-001/levels/imported-001/specimens/specimen-001/exports/rir/pass-001/raw-u32le.bin \
@@ -1562,8 +1621,8 @@ by evidence provenance, not by an implied execution order:
 | Layer | Requested output | Completion proof |
 |---|---|---|
 | 1. Goal/checklist | All four models (`evidence-only`, `public-model`, `cross-checked-theory`, `compare`), each in JSON, JSONL, text, and canonical-JSON binary, with inert apply dry-run and OTP-readiness records | Every requested artifact is present in, and hash-bound by, the verified full-dump index |
-| 2. Exact-current option matrix | All 18 independent profiles per card; the complete candidate in JSON, JSONL, text, and canonical-JSON binary; every proposed 512-row MAIN image in JSON, JSONL, indexed text, and raw u32le | Every transport is independently decoded and compared; every row image replays to the candidate's bound digest |
-| 3. Current-baseline sibling manifests | All seven admitted v2 profiles per card, retained as mutually exclusive review artifacts | Each manifest is compiled and independently verified; no review receipt is created and execution remains unauthorized. They are not an ordered or cumulative burn sequence. |
+| 2. Exact-current option matrix | All 24 independent profiles per card; the complete candidate in JSON, JSONL, text, and canonical-JSON binary; every proposed 512-row MAIN image in JSON, JSONL, indexed text, and raw u32le | Every transport is independently decoded and compared; every row image replays to the candidate's bound digest |
+| 3. Current-baseline sibling manifests | All seven admitted v3 profiles per card, retained as mutually exclusive review artifacts | Each manifest is compiled and independently verified; no review receipt is created and execution remains unauthorized. They are not an ordered or cumulative burn sequence. |
 
 ### Route-aware report layout
 
@@ -1591,7 +1650,7 @@ benchmark campaign.
 |   |-- option-matrix.json
 |   |-- SHA256SUMS
 |   |-- candidate-plan.{json,jsonl,txt,canonical-json.bin}
-|   |-- cards/<BDF>/profiles/<PROFILE>/    # 18 independent outcomes
+|   |-- cards/<BDF>/profiles/<PROFILE>/    # 24 independent outcomes
 |   |   |-- profile-binding.json
 |   |   `-- proposed-main.{json,jsonl,indexed.txt,raw-u32le.bin}
 |   `-- current-baseline-sibling-manifests/<BDF>/
@@ -1634,8 +1693,8 @@ current `010-common-topology` directory also contains
 `next-required-capture.json` and references the option matrix's authoritative
 manifest.
 
-The 18 option profiles are a matrix of **independent, non-additive** answers to
-“what would this one policy propose from this exact baseline?” They are not 18
+The 24 option profiles are a matrix of **independent, non-additive** answers to
+“what would this one policy propose from this exact baseline?” They are not 24
 steps. In particular, HBM-only and SM-only are alternatives/subsets of the
 common-topology profile, and SYS_PIPE-only overlaps the media/MIG experimental
 profile. Likewise, the seven files in each
@@ -1660,7 +1719,7 @@ and an exact-current rebase create the next epoch:
 ```
 
 Those epoch-001/002 arrows are a sequencing forecast, not implemented planner
-transitions. Full-report 0.7 packages only the initial `000-baseline` state; it
+transitions. Full-report 0.8 packages only the initial `000-baseline` state; it
 does not promote a changed-card capture or compile PCIe/identity as the new
 current segment. Preserve the initial report after any card change and use
 separately reviewed tooling that explicitly supports the observed later epoch.
@@ -1779,7 +1838,7 @@ The report retains full `nvidia-smi`, `-q`, XML, topology, NVLink and MIG
 output; CPU, DIMM, motherboard, BIOS, kernel, driver/module, CUDA/library, PCIe
 and NVMe evidence; every covered dump format; specimen-specific 64/80/96-GiB
 and up-to-128-SM defect ceilings; both CMP-retained and A100-identity/VBIOS route
-models; the 18-profile independent option matrix and seven current-baseline
+models; the 24-profile independent option matrix and seven current-baseline
 sibling manifests; and
 explicit feature boundaries for ECC, MIG, NVENC, NVDEC, NVJPEG and OFA.
 
@@ -2172,14 +2231,14 @@ Current artifacts use these identifiers:
 | plan | `170hx-xray-plan-v1` | Hash-bound, non-executable per-specimen goal assessment; zero operations. |
 | apply result | `170hx-xray-apply-dry-run-v1` | Integrity/structure validation only; zero writes. |
 | legacy full-write readiness | `170hx-xray-full-write-readiness-v1` | Explicit blocker/lifecycle report; optional confirmation-only UX; unconditional `EOPNOTSUPP` for v1. |
-| v2 sealed manifest | `170hx-xray-otp-sealed-manifest-v2` | One exact `20c2` BDF/profile, exact-current capture, full images, independent semantic replay, blank-row allowlist, and backend hash. |
-| v2 review receipt | `170hx-xray-vfi-append-review-receipt-v1` | Exact typed owner review bound to the final manifest; not a production signature. |
-| v2 live journal | `170hx-xray-vfi-append-journal-v1` | Create-only, fsync-per-event, hash-chained setup/attempt/verification/terminal record. |
+| v3 sealed manifest | `170hx-xray-otp-sealed-manifest-v3` | One exact `20c2` BDF/profile, exact-current capture, full images, independent semantic replay, blank-row allowlist, exact backend version, and armed-image equality policy. |
+| v3 review receipt | `170hx-xray-vfi-append-review-receipt-v1` | Exact typed owner review bound to the final manifest; not a production signature. |
+| v3 live journal | `170hx-xray-vfi-append-journal-v1` | Create-only, fsync-per-event, hash-chained setup/attempt/verification/terminal record. |
 | power-cycle attestation | `170hx-xray-power-cycle-attestation-v1` | Operator-supplied, hash-bound physical power/identity statement. |
 | cold receipt | `170hx-xray-vfi-append-cold-receipt-v2` | Exact two-pass native cold MAIN/RIR persistence closure; planner no-op and feature validation remain separate. |
 | full-dump index | `170hx-xray-full-dump-v1` | Deterministic bundle inventory, per-product status, and file hashes; no execution authority. |
 | full-dump verification | `170hx-xray-full-dump-verification-v1` | Exact-file-set/hash/mode validation; self-consistency, not authenticity. |
-| kernel helper | XRAY ABI 6 | Fixed-width full-domain identity, XRAY-specific ioctl namespace, allowlisted READ32, atomic MAIN/RIR dumps, controller-IFF-aware software-redirection gate, hardened command accounting, and last journal. |
+| kernel helper | XRAY ABI 6 | Fixed-width full-domain identity, XRAY-specific ioctl namespace, allowlisted READ32, complete helper-serialized MAIN/RIR double-pass dumps, controller-IFF-aware software-redirection gate, hardened command accounting, and last journal. |
 | thermal helper | thermal ABI 5 | Module 1.5.1; full-domain identity; pure `O_RDONLY` and semantic/HBM `O_RDWR` plus kernel `FMODE_WRITE`; seven unconditional selector-dependent omissions (`0xf`); 255 / 385+polls / 409+polls read contracts; optional one-trigger/24-selector/restored semantic snapshot; explicit HBM DATA mask; population masks; and no generic MMIO primitive. |
 
 For every capture, retain together:
@@ -2212,14 +2271,14 @@ derived artifact or evidence report and preserve the source hash.
 - Existing 1 bits, later FF precedence, IFF effects, RIR corrections, control
   fuses, and every interruption prefix all matter to a safe plan.
 - No retained capture or candidate plan by itself authorizes voltage glitching
-  or fuse burning; v2 requires a new manifest-specific review receipt and live
+  or fuse burning; v3 requires a new manifest-specific review receipt and live
   runtime confirmations.
 
 ## Release provenance
 
 The immutable RAY 3.4.0/3.7.0 capture and predecessor-release hashes remain in
 the private legacy evidence tree. [`RELEASE_HASHES.md`](./RELEASE_HASHES.md) is
-the current XRAY 4.3.0 public-source identity ledger. Recoverable pre-migration archives
+the current XRAY 4.4.0 public-source identity ledger. Recoverable pre-migration archives
 and their checksums are under
 [`release-backups/pre-xray-3.7.0-2026-11-23`](docs/PROVENANCE.md#workspace-only-evidence).
 The legacy manifest separately identifies
@@ -2234,7 +2293,7 @@ a Clang Kbuild flag blocker, and 780 outstanding Linux-format differences are
 historical and superseded. The current exact commands, bounded static-analysis
 findings, clean LLVM/GCC/Sparse/clang-tidy results, and pre/post-format object
 comparison are in
-[`STATIC_AND_KERNEL_VALIDATION_2026-11-26.md`](docs/STATIC_AND_KERNEL_VALIDATION_2026-11-26.md).
+[`STATIC_AND_KERNEL_VALIDATION_2026-11-28.md`](docs/STATIC_AND_KERNEL_VALIDATION_2026-11-28.md).
 
 ## License
 
@@ -2270,10 +2329,11 @@ the trust boundaries and contradictions.
 | [Kate Land, “Using voltage glitching to unlock the A100”](https://blog.kate.land/posts/using-voltage-glitching-to-unlock-the-a100/) | accessed 2026-11-17 | Primary account and conceptual VFI provenance; not a complete permanent-fuse procedure. |
 | [kate-land/ga100vfi](https://github.com/kate-land/ga100vfi) | current `39b7bfe5a148731d90a052b13cad6d69188c59bf`; historical tree preserved locally at `b71e3990cc652a07cdbb5c6d1192e3e8116692d2` | Current upstream withdraws the obsolete PCB/firmware and redirects to community implementations. Technical analysis of Kate's original hardware, firmware and captures uses the separately pinned historical tree; it contains no complete FF writer. |
 | [dalzyu/pico-ga100vfi](https://github.com/dalzyu/pico-ga100vfi) | `8be8296afe2a8a62a9d6ab76f641567f96b0323f` (2026-11-20) | Current 3-D adaptive Pico search/telemetry implementation; its classifier still writes EN_SW, and a favorable result is not fuse-write authorization. |
-| [portz3r0/pico-ga100vfi-console](https://github.com/portz3r0/pico-ga100vfi-console) | `aba33dc63466f6ca013bc7860cee24cdec6d5c4d` (2026-11-26) | Current console/guarded-reader/burn-window reference. It makes its contaminating `EN_SW_OVERRIDE` classifier write opt-in, adds a default 10-second inter-shot cooldown after a reported 100-shot/2-minute VRM-fatigue event, verifies VRM unlock instead of permitting silent no-op attempts, and records a firmware-campaign rollback. These are bounded implementation/field safeguards, not electrical qualification or fuse-write authority; ordinary planning still lacks XRAY's full-image/RIR/context binding. |
-| [darkmaniac7/cmp170hx-8gb-vfi-tools](https://github.com/darkmaniac7/cmp170hx-8gb-vfi-tools) | `1e59fd5acedd22df0ea7fef2108156d9f7f0778b` (2026-11-25) | Difficult-card timing/search evidence, hosted Allspark synthesis and an 80-GiB driver-geometry patch; single-fixture values and fixed-row public flows remain non-universal. |
+| [portz3r0/pico-ga100vfi-console](https://github.com/portz3r0/pico-ga100vfi-console) | `e9e9a33c8b3515563959f7239a0df2a1a3b6eef3` (2026-11-28) | Current console/guarded-reader/burn-window reference, including an inert-then-arm two-step idea, paired identity queue and richer campaign safeguards. Timeout-as-absence, fixed bounds, reserve/plane-gate bypass and abort/cleanup uncertainty remain rejected; the repository is not electrical qualification or fuse-write authority. |
+| [darkmaniac7/cmp170hx-8gb-vfi-tools](https://github.com/darkmaniac7/cmp170hx-8gb-vfi-tools) | `f422f80a716fff2c1dc112abcf2e9d43a04b6614` (2026-11-27) | Current difficult-card, topology and fuse-plan synthesis, including review hypotheses for RECONFIG, speed-select and conventional fields. Fixed-row/reserve contradictions and specimen-specific claims remain non-universal and non-executable. |
 | [repeaterdroid/cmp170hx-mig-nvdec-nvjpg-ofa-unlock](https://github.com/repeaterdroid/cmp170hx-mig-nvdec-nvjpg-ofa-unlock) | `e3826fee39583f1e8f03ef97c1914f3631f1c005` (2026-11-22) | One-card SYS_PIPE/NVDEC/NVJPG/OFA burn-and-function report. It raises coordinate confidence but does not separate the two NVJPG/OFA bits or supply an independently sealed campaign bundle. |
-| [sayhellotojungle/cmp170hx-ffcalc](https://github.com/sayhellotojungle/cmp170hx-ffcalc) | `3d157f254991904674fb0f47d5e236ac4f9b5ce7` (2026-11-25) | Public FF calculator and sample data, retained as forensic input. Its new media proof incorrectly substitutes status/disable equality for direct defect reads, so it is not burner authority. |
+| [sayhellotojungle/cmp170hx-ffcalc](https://github.com/sayhellotojungle/cmp170hx-ffcalc) | `e28e03a40ade83079f518df7416072daea047bf9` (2026-11-27) | Current public FF calculator, expanded read/status inventory and write-window discussion, retained as forensic input. Missing blocks can still become zero, warnings need not stop output, and fixed-bound/dependency assumptions remain; it is not burner authority. |
+| [sayhellotojungle/cmpunlocker](https://github.com/sayhellotojungle/cmpunlocker) | `8b6c556fedaa0150a6fc40c74297b20cb5e508a6` (2026-11-26) | HBM/firmware/power diagnostic reads and experimental link-training telemetry. Pure-read observations were imported individually; runtime power/link transitions add no fuse coordinate or write authority. |
 | [lixiangwuxian/170hx-rir-tool](https://github.com/lixiangwuxian/170hx-rir-tool) | `03a612af5f6ebfdd8df50fe9e88cacce7c512a54` | RIR and override experiments; its 10 GB path cannot be transplanted automatically to an 8 GB card. |
 | [JRex286 GA100 fuse gist](https://gist.github.com/JRex286/0480d2b2b35ad594e57b6543952be307) | `0db3baa71954009c4e2269544b6b74a67f1fa08e` (2026-05-31) | Comparative empirical register table; not an authoritative physical descriptor. |
 | Supplied `Double_Precision__SS1.txt` | SHA-256 `f1dce77f6a911deeca779f820409ccdbb05e5c2ce6349027e880ff50dc0d9327` (received 2026-11-26) | Correctly bounds the static evidence: bit 26 tracks DP in the supplied specimens, while invariant bit 27 cannot establish its own control/undo behavior. |

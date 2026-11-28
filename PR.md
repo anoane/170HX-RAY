@@ -139,8 +139,9 @@ tree with `LLVM=1`, generate its `Module.symvers`, and then run external-module
 Kbuild with `LLVM=1 W=1 KCFLAGS=-Werror`. Do not filter the GCC-only flags from
 the running Debian-header compilation database and call that a Clang Kbuild.
 The formerly unavailable-tool, GCC-flag, and 780-format-difference notes are
-historical; the resolved commands and results are in
-[`docs/STATIC_AND_KERNEL_VALIDATION_2026-11-26.md`](docs/STATIC_AND_KERNEL_VALIDATION_2026-11-26.md).
+historical; the current helper-4.2/CUDA commands and results are in
+[`docs/STATIC_AND_KERNEL_VALIDATION_2026-11-28.md`](docs/STATIC_AND_KERNEL_VALIDATION_2026-11-28.md).
+The 2026-11-26 document remains a historical helper-4.1 record.
 
 KASAN/KCSAN/lockdep stress requires a dedicated compatible host and must record
 kernel configuration, workload, duration, dmesg/Xid deltas and module lifetime.
@@ -168,8 +169,10 @@ unrequested work into `skipped`.
 
 - [ ] `README.md`, `USAGE.md`, plan models and credits match implementation.
 - [ ] Register/field entries include certainty, source and limitation.
-- [ ] Historical artifacts are labeled historical; no old 11/7-profile bundle
-      is relabeled as current 12/8-profile output.
+- [ ] Historical inventories are never relabeled as the current 24-profile /
+      12-review-only / 7-execution-eligible contract.
+- [ ] Release-manifest filenames use exactly
+      `<BDF-slug>__<canonical-profile>.json` and fail closed on aliases.
 - [ ] Normal and sanitized trees differ only at documented provenance boundaries.
 - [ ] The sanitized boundary scan includes regular files, binaries and caches;
       caches/build products are removed before the final scan.
@@ -206,8 +209,9 @@ Before merge/release:
    file;
 6. verify both a non-recursive clone's fail-closed behavior and a clean
    `git clone --recurse-submodules` checkout;
-7. verify `.gitmodules`, the ArchBench lock file, and the mode-`160000` gitlink
-   all bind the exact reviewed submodule commit;
+7. verify `.gitmodules`, the ArchBench JSON lock, its 104-entry mode/SHA-256
+   manifest, the origin URL and the mode-`160000` gitlink all bind the exact
+   reviewed submodule commit/tree;
 8. tag/commit the exact tested tree; and
 9. publish only after the commit, report and hashes agree.
 

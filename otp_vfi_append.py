@@ -33,7 +33,8 @@ import uuid
 
 
 BACKEND_ID = "ga100-vfi-ff-append-v1"
-MANIFEST_SCHEMA = "170hx-xray-otp-sealed-manifest-v2"
+BACKEND_VERSION = "1.1.0"
+MANIFEST_SCHEMA = "170hx-xray-otp-sealed-manifest-v3"
 RECEIPT_SCHEMA = "170hx-xray-vfi-append-review-receipt-v1"
 JOURNAL_SCHEMA = "170hx-xray-vfi-append-journal-v1"
 COLD_ATTESTATION_SCHEMA = "170hx-xray-power-cycle-attestation-v1"
@@ -68,7 +69,11 @@ SUPPORTED_NATIVE_HELPER_ABIS = frozenset((
 
 STRATEGY_PUBLIC_DIRECT = "public-direct-compat"
 STRATEGY_EVIDENCE_GUARDED = "evidence-led-guarded"
+STRATEGY_INERT_THEN_ARM_TRACE = "inert-then-arm-experimental-trace-only"
 WRITE_STRATEGIES = (STRATEGY_PUBLIC_DIRECT, STRATEGY_EVIDENCE_GUARDED)
+TRANSACTION_TRACE_STRATEGIES = WRITE_STRATEGIES + (
+    STRATEGY_INERT_THEN_ARM_TRACE,
+)
 
 FUSECTRL = 0x00820000
 FUSEADDR = 0x00820004
@@ -113,9 +118,16 @@ def validate_write_strategy(value):
     return value
 
 
+def validate_trace_strategy(value):
+    _require(value in TRANSACTION_TRACE_STRATEGIES,
+             "transaction trace strategy must be selected from: %s" %
+             ", ".join(TRANSACTION_TRACE_STRATEGIES))
+    return value
+
+
 def transaction_trace(validated, write_strategy):
     """Return a deterministic, non-executing MMIO transaction specification."""
-    strategy = validate_write_strategy(write_strategy)
+    strategy = validate_trace_strategy(write_strategy)
     operations = [
         {
             "index": item["index"], "row": item["row"],
@@ -130,8 +142,24 @@ def transaction_trace(validated, write_strategy):
         "bdf": validated["bdf"],
         "profile_id": validated["profile_id"],
         "execution_performed": False,
+        "execution_eligible": strategy in WRITE_STRATEGIES,
         "controller_command_field": "FUSECTRL.CMD[1:0]",
         "exact_current_20c2_idle_word": "0xe0040000",
+        "ownership_model": {
+            "transport": "userspace resource0 mmap",
+            "kernel_owned_irreversible_transaction": False,
+            "bind_remove_toctou_closed": False,
+            "interlocks": [
+                "exact unbound PCI tuple and resource inode",
+                "private exact-BDF process lock",
+                "driver_override sentinel",
+                "identity/resource re-attestation immediately before CMD_PROGRAM",
+            ],
+            "qualification": (
+                "experimental only; a reviewed manifest and confirmations do "
+                "not close the userspace-to-kernel ownership race"
+            ),
+        },
         "timing_registers": {
             "snapshot_only": [
                 "0x%08x" % value for value in (
@@ -164,7 +192,68 @@ def transaction_trace(validated, write_strategy):
             "MMIO cleanup after poison or uncertain command",
         ],
     }
-    if strategy == STRATEGY_PUBLIC_DIRECT:
+    if strategy == STRATEGY_INERT_THEN_ARM_TRACE:
+        two_step_rows = []
+        for item in validated["operations"]:
+            word = int(item["word"])
+            chain = word & 0x1F
+            two_step_rows.append({
+                "index": item["index"],
+                "row": item["row"],
+                "stage": item["stage"],
+                "chain": chain,
+                "chain_is_supported_one_hot": chain in (1, 2, 4, 8, 16),
+                "step_a_inert_word": "0x%08x" % (word & ~0x1F),
+                "step_a_requirement": (
+                    "one irreversible command, exact readback, then a complete "
+                    "two-pass image/prefix proof before step B"
+                ),
+                "step_b_chain_only_delta": "0x%08x" % chain,
+                "step_b_armed_word": "0x%08x" % word,
+                "step_b_requirement": (
+                    "a distinct irreversible command and authorization; never "
+                    "issue after any uncertain or partial step-A result"
+                ),
+            })
+        common["execution_eligible"] = False
+        common["program_loop"] = [
+            "re-attest exact ownership and all gates",
+            "CMD_READ sealed target and require zero",
+            "fsync a unique step-A one-attempt journal record",
+            "program chain-zero inert word exactly once",
+            "bounded poll; exact row readback and complete two-pass image proof",
+            "stop permanently before step B after any uncertainty or mismatch",
+            "fsync a distinct step-B authorization and one-attempt record",
+            "program only the sealed one-hot chain delta exactly once",
+            "bounded poll; exact armed-word readback and complete prefix proof",
+            "never retry either substep",
+        ]
+        common["trace_only_reason"] = (
+            "the public two-step idea is useful for failure containment but "
+            "doubles irreversible pulses and lacks independent electrical, "
+            "journal, continuation, and cold-recovery qualification"
+        )
+        common["setup"] = [
+            "use a separately selected qualified setup strategy; this trace "
+            "does not choose or authorize EN_SW/SENSE ordering"
+        ]
+        common["two_step_row_operations"] = two_step_rows
+        common["additional_required_gates"] = [
+            "every chain is supported one-hot",
+            "unique durable authorization and attempt token per substep",
+            "step-A exact complete-image proof before step B",
+            "step-A failure or timeout permanently forbids step B and retry",
+            "no cleanup/re-glitch after an uncertain command",
+            "independent cold recovery and persistence qualification",
+        ]
+        common["verification_cadence"] = (
+            "exact row plus complete two-pass MAIN/prefix proof after each substep"
+        )
+        common["compatibility_note"] = (
+            "review model of the e9e9a33 public-console algorithm; absent from "
+            "WRITE_STRATEGIES and unreachable by live execution"
+        )
+    elif strategy == STRATEGY_PUBLIC_DIRECT:
         common["setup"] = [
             "journal setup intent",
             "require RESENSE_DISABLE(0x821058)=0; never write it",
@@ -213,7 +302,10 @@ EXPECTED_LIVE_POLICY = {
     "cold_power_cycle_verification_required": True,
     "live_rir_read_required": True,
     "held_state_capture_required": True,
+    "held_state_main_cold_equal_rows": [0, 487],
+    "held_state_iff_suffix_rows": [488, 511],
     "armed_state_capture_before_first_program_required": True,
+    "armed_complete_image_must_equal_held_image": True,
     "setup_variants_by_initial_efp_status": {
         "0": "enable-override-sense-arm",
         "1": "enable-override-skip-sense-arm",
@@ -456,6 +548,8 @@ def _require_sha256(value, label, allow_zero=False):
 
 def _require_exact_policy(actual, expected, label):
     _require(isinstance(actual, dict), "%s is missing" % label)
+    _require(set(actual) == set(expected),
+             "%s field set differs from the required policy" % label)
     for key, value in expected.items():
         _require(key in actual and actual[key] == value,
                  "%s.%s differs from the required policy" % (label, key))
@@ -553,12 +647,13 @@ def load_and_validate_manifest(path, expected_bdf=None, expected_profile=None):
              "unsupported manifest schema")
     content_sha256 = _verify_content_digest(manifest)
     profile = manifest.get("backend_profile")
-    if isinstance(profile, dict):
-        profile = profile.get("id")
-    _require(profile == BACKEND_ID, "manifest is not bound to the VFI append backend")
+    _require(isinstance(profile, dict) and
+             profile.get("id") == BACKEND_ID and
+             profile.get("version") == BACKEND_VERSION,
+             "manifest is not bound to the exact VFI append backend version")
     _require(manifest.get("executable") is True and
              manifest.get("execution_eligible") is True,
-             "v2 manifest is not structurally execution-eligible")
+             "v3 manifest is not structurally execution-eligible")
     _require(manifest.get("execution_authorized") is False,
              "authorization must be supplied interactively at runtime")
     _require(manifest.get("hardware_backend_invoked") is False,
@@ -576,7 +671,7 @@ def load_and_validate_manifest(path, expected_bdf=None, expected_profile=None):
     _require(implementation["backend_file_sha256"] == _sha256_file(__file__),
              "live backend bytes differ from the manifest-bound implementation")
     _require(implementation.get("compiler_semantics") ==
-             "v2-exact-current-replay-2026-11-23" and
+             "v3-exact-current-replay-2026-11-27" and
              implementation.get("candidate_validator_semantics") ==
              "candidate-plan-v1-strict-plus-independent-replay",
              "implementation semantic-version binding is absent or stale")
@@ -1773,6 +1868,24 @@ def _validate_native_transaction(transaction, kind, count, identity,
     return parsed, hashes
 
 
+def _serialized_helper_certification(certification):
+    """Accept current wording or an explicitly interpreted legacy artifact."""
+    if not isinstance(certification, dict):
+        return False
+    current_key = "two_passes_in_one_helper_serialized_ioctl_transaction"
+    current = certification.get(current_key)
+    legacy = certification.get("same_atomic_helper_transaction_per_pass")
+    if current is not None:
+        return (
+            current is True and
+            certification.get("hardware_atomic_snapshot") is False
+        )
+    return (
+        legacy is True and
+        certification.get("hardware_atomic_snapshot") is not True
+    )
+
+
 def _validate_native_cold_capture(path, validated, expected,
                                   expected_identity=None,
                                   required_dsov=None):
@@ -1857,13 +1970,13 @@ def _validate_native_cold_capture(path, validated, expected,
              physical_cert.get("available") is True and
              physical_cert.get("driver_unbound") is True and
              physical_cert.get("full_domain_identity_bound") is True and
-             physical_cert.get("same_atomic_helper_transaction_per_pass") is True and
+             _serialized_helper_certification(physical_cert) and
              physical_cert.get("software_iff_redirection_excluded") is True,
              "post-cold MAIN certification is incomplete")
     _require(isinstance(rir_cert, dict) and rir_cert.get("available") is True and
              rir_cert.get("driver_unbound") is True and
              rir_cert.get("full_domain_identity_bound") is True and
-             rir_cert.get("same_atomic_helper_transaction_per_pass") is True and
+             _serialized_helper_certification(rir_cert) and
              rir_cert.get("debug_rwl_restored") is True,
              "post-cold RIR certification is incomplete")
     main_passes, main_hashes = _validate_native_transaction(
@@ -2644,19 +2757,17 @@ class VfiAppendSession(object):
         return expected
 
     def finalize_armed_runtime_baseline(self):
-        """Bind the EN=1/SENSE-selected plane before any OTP command."""
+        """Prove arming did not alter the sealed held image before OTP."""
         _require(self.phase == "armed",
                  "armed-plane finalization requires the newly armed phase")
         expected = list(self.runtime_baseline)
         capture = self.capture_pair_with_expected(
             expected, "same-session armed-plane baseline",
-            allow_state_variant_suffix=True)
+            allow_state_variant_suffix=False)
+        # A structurally valid but different IFF suffix is not enough.  Until
+        # the EN=1 transformation has a separately qualified semantic model,
+        # changing even one held row is terminal and no OTP command may issue.
         armed_baseline = list(expected)
-        armed_baseline[COMPARE_LAST + 1:] = [
-            _parse_u32(value, "armed-plane suffix")
-            for value in capture["live_suffix_rows_488_511"]
-        ]
-        self.runtime_baseline = armed_baseline
         gates = self.gate_snapshot(require_armed=True)
         if self.journal is not None:
             self.journal.append(
@@ -3227,7 +3338,8 @@ def confirmation_contract(
         "profile_id": validated["profile_id"],
         "write_strategy": strategy,
         "risk_phrase": (
-            "BURN GA100 VFI FF APPEND %d ROWS USING %s" %
+            "BURN GA100 VFI FF APPEND %d ROWS USING %s; "
+            "USERSPACE OWNERSHIP RACE UNRESOLVED" %
             (len(validated["operations"]), strategy)
         ),
     }

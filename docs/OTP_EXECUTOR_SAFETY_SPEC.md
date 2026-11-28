@@ -1,11 +1,32 @@
 # Legacy OTP executor safety specification (hardware-inert v1)
 
 Status: **offline v1 tooling and host tests only**. This document describes the
-older inert specification/oracle, not the experimental v2 append backend. There
+older inert specification/oracle, not the experimental v3 append backend. There
 is still no OTP programming ioctl, generic MMIO write primitive, or GPIO backend
 in the observation module, and its UAPI remains read-only. The distinct
-`170hx-xray-otp-sealed-manifest-v2` lifecycle and user-space blank-FF transport
+`170hx-xray-otp-sealed-manifest-v3` lifecycle and userspace blank-FF transport
 are documented in the README; a v1 file is never upgraded implicitly.
+
+## Current v3 boundary (not supplied by v1)
+
+The v3 compiler and backend accept only schema
+`170hx-xray-otp-sealed-manifest-v3`; retired v2 input must be recompiled from
+unchanged exact-current evidence and reviewed again. The held-state capture
+certificate must say
+`two_passes_in_one_helper_serialized_ioctl_transaction=true` and explicitly
+`hardware_atomic_snapshot=false`: serialization within one helper ioctl is not
+a hardware-atomic snapshot. After arming, both complete 512-row MAIN passes
+must equal the held-state image exactly, including every prefix, active-IFF
+header/payload and tail word. No suffix is rebound after arming.
+
+The live v3 transport still maps PCI `resource0` in userspace. An exact BDF/PCI
+tuple, resource inode, process lock, `driver_override` sentinel and immediate
+pre-command re-attestation narrow but cannot atomically close the kernel
+bind/remove TOCTOU. It remains unqualified until a separately reviewed kernel
+transaction ABI owns the irreversible boundary. The offline strategy named
+`inert-then-arm-experimental-trace-only` models separate inert-word and
+chain-activation pulses, but is absent from executable strategies and cannot
+reach authorization, command issue or a live journal.
 
 ## What is implemented
 
@@ -123,5 +144,5 @@ Any future kernel ABI must accept only a sealed manifest and exact device identi
 must never accept an arbitrary offset/value pair. It must journal and fsync the
 one-attempt token before the command boundary, use an independently supervised
 source-low cleanup path, and refuse all execution after any uncertain outcome.
-The narrow v2 user-space backend does not establish those missing electrical
+The narrow v3 userspace backend does not establish those missing electrical
 facts and deliberately exposes no arbitrary address/value interface.

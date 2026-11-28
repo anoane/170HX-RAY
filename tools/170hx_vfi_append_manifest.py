@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Compile and review GA100 VFI blank-FF append manifests.
 
-This compiler emits the distinct sealed-v2 schema consumed only by the
+This compiler emits the distinct sealed-v3 schema consumed only by the
 ``ga100-vfi-ff-append-v1`` XRAY backend. Compilation performs no hardware
 access. Retired RAY artifacts are accepted only through explicit input
 normalization and are never emitted.
@@ -40,10 +40,10 @@ def _load_module(name, path):
     return module
 
 
-OLD_SPEC = _load_module("xray_otp_inert_spec_for_v2", SPEC_PATH)
+OLD_SPEC = _load_module("xray_otp_inert_spec_for_v3", SPEC_PATH)
 BACKEND = _load_module("xray_vfi_append_for_compiler", BACKEND_PATH)
 
-TOOL_VERSION = "0.5.0"
+TOOL_VERSION = "0.6.0"
 MANIFEST_SCHEMA = BACKEND.MANIFEST_SCHEMA
 RECEIPT_SCHEMA = BACKEND.RECEIPT_SCHEMA
 BACKEND_ID = BACKEND.BACKEND_ID
@@ -88,7 +88,7 @@ STAGE_RANK = {
     "identity-last": 90,
 }
 
-# Execution-eligible v2 is intentionally smaller than the candidate-plan
+# Execution-eligible v3 is intentionally smaller than the candidate-plan
 # language.  These are the only profile/field models the compiler will accept.
 # Coordinates are (chain, block, bit-in-block, width), least-significant piece
 # first.  Keeping this table independent of candidate JSON prevents a resealed
@@ -258,8 +258,20 @@ PAIRED_MEDIA_FIELDS = frozenset((
 PROFILE_ALIASES = {
     "specimen-hbm-to-defect-ceiling": "specimen-80gb-hbm",
     "ray-common-permanent-topology": "xray-common-permanent-topology",
-    "ray-best-evidence-a100-conversion":
-        "xray-best-evidence-a100-conversion",
+}
+
+# This historical spelling described a multi-session route, not one of the
+# compiler's execution-eligible single-session profiles.  Reject it explicitly
+# instead of normalizing it to a profile the compiler cannot seal.
+REJECTED_PROFILE_ALIASES = {
+    "ray-best-evidence-a100-conversion": (
+        "the A100-conversion route must be reviewed and compiled as its "
+        "separate eligible sessions; no monolithic executable profile exists"
+    ),
+    "xray-best-evidence-a100-conversion": (
+        "the A100-conversion route must be reviewed and compiled as its "
+        "separate eligible sessions; no monolithic executable profile exists"
+    ),
 }
 
 IDENTITY_PREFIX_RISK = (
@@ -490,6 +502,25 @@ def _normalize_legacy_capture(value):
                     "legacy normalization key collision at %r" % normalized_key
                 )
             result[normalized_key] = _normalize_legacy_capture(item)
+        # Early helper artifacts used an inaccurate field name for one ioctl
+        # containing sequential helper-serialized reads.  Translate the claim
+        # explicitly while preserving the historical byte evidence; this is
+        # never hardware-atomic proof.
+        if (result.get("same_atomic_helper_transaction_per_pass") is True and
+                "two_passes_in_one_helper_serialized_ioctl_transaction"
+                not in result):
+            if "hardware_atomic_snapshot" in result:
+                require(result["hardware_atomic_snapshot"] is False,
+                        "legacy helper certification contradicts serialized "
+                        "semantics by claiming hardware atomicity")
+            result[
+                "two_passes_in_one_helper_serialized_ioctl_transaction"
+            ] = True
+            result.setdefault("hardware_atomic_snapshot", False)
+            result["legacy_atomic_field_interpretation"] = (
+                "deprecated spelling; means one helper-serialized ioctl "
+                "transaction per pass, not a hardware-atomic snapshot"
+            )
         return result
     if isinstance(value, str):
         return {
@@ -699,13 +730,15 @@ def _validate_native_capture(capture_path, capture_sha256, bdf, baseline, rir):
     require(isinstance(main_cert, dict) and
             all(main_cert.get(key) is True for key in (
                 "available", "driver_unbound", "full_domain_identity_bound",
-                "same_atomic_helper_transaction_per_pass",
+                "two_passes_in_one_helper_serialized_ioctl_transaction",
                 "software_iff_redirection_excluded")) and
+            main_cert.get("hardware_atomic_snapshot") is False and
             isinstance(rir_cert, dict) and
             all(rir_cert.get(key) is True for key in (
                 "available", "driver_unbound", "full_domain_identity_bound",
-                "same_atomic_helper_transaction_per_pass",
-                "debug_rwl_restored")),
+                "two_passes_in_one_helper_serialized_ioctl_transaction",
+                "debug_rwl_restored")) and
+            rir_cert.get("hardware_atomic_snapshot") is False,
             "native MAIN/RIR certification flags are incomplete")
     main_tx = physical.get("transaction")
     rir_tx = rir_rows.get("transaction")
@@ -1277,6 +1310,12 @@ def _current_residual_risks(profile):
                 "undocumented; confidence comes from the November multi-card BAR0 append results"
             )
         risks.append(item)
+    risks.append(
+        "live irreversible transport uses userspace resource0 mmap; exact "
+        "re-attestation and driver_override narrow but cannot atomically close "
+        "the kernel bind/remove race, so a purpose-built kernel transaction "
+        "ABI remains required for qualified execution"
+    )
     return risks
 
 
@@ -1337,6 +1376,11 @@ def _semantic_proofs(profile, replay_provenance):
 
 def build_manifest(candidate_path, bdf, profile_id, cold_main_path,
                    cold_rir_path, generated_utc=None):
+    require(profile_id not in REJECTED_PROFILE_ALIASES,
+            REJECTED_PROFILE_ALIASES.get(profile_id, ""))
+    require(all(target in APPROVED_PROFILES
+                for target in PROFILE_ALIASES.values()),
+            "internal compiler profile alias does not resolve to an approved profile")
     profile_id = PROFILE_ALIASES.get(profile_id, profile_id)
     candidate_file_sha = sha256_file(candidate_path)
     candidate = _strict_json_file(
@@ -1349,6 +1393,12 @@ def build_manifest(candidate_path, bdf, profile_id, cold_main_path,
             candidate, str(bdf).lower(), profile_id)
     except OLD_SPEC.SpecFailure as exc:
         raise CompileError(str(exc)) from exc
+
+    require(all(BACKEND.FF_FIRST <= int(row) <= BACKEND.COMPARE_LAST
+                for row in validated["operation_rows"]),
+            "candidate operation row escapes the runtime execution domain "
+            "%d..%d; later dynamic FF rows remain review-only" %
+            (BACKEND.FF_FIRST, BACKEND.COMPARE_LAST))
 
     cold_main = _read_image(cold_main_path, 512, "cold MAIN")
     cold_rir = _read_image(cold_rir_path, 8, "cold RIR")
@@ -1405,6 +1455,7 @@ def build_manifest(candidate_path, bdf, profile_id, cold_main_path,
         "generated_utc": generated_utc or utc_now(),
         "backend_profile": {
             "id": BACKEND_ID,
+            "version": BACKEND.BACKEND_VERSION,
             "scope": "verified-blank GA100 main-array FF append only",
             "external_gpio_required": False,
             "generic_mmio_write_api": False,
@@ -1413,7 +1464,7 @@ def build_manifest(candidate_path, bdf, profile_id, cold_main_path,
             "backend_file_sha256": sha256_file(BACKEND_PATH),
             "compiler_file_sha256": sha256_file(Path(__file__).resolve()),
             "old_candidate_validator_file_sha256": sha256_file(SPEC_PATH),
-            "compiler_semantics": "v2-exact-current-replay-2026-11-23",
+            "compiler_semantics": "v3-exact-current-replay-2026-11-27",
             "candidate_validator_semantics":
                 "candidate-plan-v1-strict-plus-independent-replay",
         },
@@ -1483,6 +1534,7 @@ def build_manifest(candidate_path, bdf, profile_id, cold_main_path,
             "held_state_iff_suffix_rows": [488, 511],
             "live_rir_read_required": True,
             "armed_state_capture_before_first_program_required": True,
+            "armed_complete_image_must_equal_held_image": True,
             "setup_variants_by_initial_efp_status": {
                 "0": "enable-override-sense-arm",
                 "1": "enable-override-skip-sense-arm",
@@ -1517,7 +1569,7 @@ def build_manifest(candidate_path, bdf, profile_id, cold_main_path,
             "EN_SW_OVERRIDE=1 readback, then branch on initial EFP: one SENSE "
             "only when EFP=0, no SENSE when EFP=1, followed by SBFE/WDATA arm",
             "two equal complete MAIN passes after arming and before the first "
-            "program command, binding the EN_SW=1 state-qualified IFF suffix",
+            "program command, exactly equal to the held image including IFF",
             "new create-only durable journal and no unresolved earlier attempt",
             "one program command per blank sealed row and no retry",
             "full power removal and independent cold verification afterward",
@@ -1634,7 +1686,7 @@ def main(argv=None):
         )
         atomic_write_json(args.output, document)
         print(strict_json_dumps({
-            "status": "v2_manifest_written",
+            "status": "v3_manifest_written",
             "output": str(Path(args.output).resolve()),
             "content_sha256": document["content_sha256_excluding_self"],
             "execution_authorized": False,
@@ -1644,7 +1696,7 @@ def main(argv=None):
     validated = BACKEND.load_and_validate_manifest(args.manifest)
     if args.command == "verify":
         print(strict_json_dumps({
-            "status": "valid_vfi_append_v2_manifest",
+            "status": "valid_vfi_append_v3_manifest",
             "bdf": validated["bdf"],
             "profile_id": validated["profile_id"],
             "operations": len(validated["operations"]),

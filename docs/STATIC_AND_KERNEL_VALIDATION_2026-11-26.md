@@ -1,6 +1,12 @@
 # Static and kernel validation — 2026-11-26
 
-This is a reproducible addendum for the current research and sanitized trees.
+This is a **historical 2026-11-26 addendum** for the then-current research and
+sanitized trees. Its Python results and helper-4.1 source hashes must not be
+presented as validation of the later helper-4.2 tree. The fresh controlling
+source-only helper result is
+[STATIC_AND_KERNEL_VALIDATION_2026-11-28.md](STATIC_AND_KERNEL_VALIDATION_2026-11-28.md).
+
+It was a reproducible addendum for those then-current trees.
 It supersedes the historical 4.2 notes that Ruff, Pylint, Bandit and Semgrep
 were unavailable, that Clang Kbuild was blocked by GCC-only Debian-header flags,
 and that Linux `clang-format` still reported 780 differences.
